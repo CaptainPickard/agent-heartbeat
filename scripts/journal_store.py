@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-DEFAULT_DB_PATH = "/workspace/journal.db"
+DEFAULT_DB_PATH = str(Path(__file__).resolve().parent.parent.parent / "journal.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS journal_entries (

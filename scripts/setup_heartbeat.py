@@ -109,13 +109,25 @@ def main():
         journal_path.write_text(journal_content)
         print(f"  ✅ Created {journal_path}")
 
+    # 3. Create PRIMARY.md (immutable directives — hash-protected + read-only)
+    primary_path = workspace / "PRIMARY.md"
+    if primary_path.exists():
+        print(f"  ⚠️  PRIMARY.md already exists at {primary_path} — skipping")
+    else:
+        # Import primary_guard from sibling script
+        scripts_dir = Path(__file__).parent
+        sys.path.insert(0, str(scripts_dir))
+        from primary_guard import setup_primary
+        setup_primary(str(workspace), human_name=args.human_name, agent_name=args.agent_name)
+        print(f"  ✅ Created {primary_path} (read-only, SHA-256 protected)")
+
     if args.skip_cron:
         print("\n  ⏭️  Skipping cron job creation (--skip-cron)")
         print(f"\n  Files created. Edit GOALS.md to customize your agent's principles and goals.")
         print(f"  To create cron jobs manually, use the prompts in templates/daytime_prompt.txt and templates/nightly_prompt.txt")
         return
 
-    # 3. Create daytime cron job
+    # 4. Create daytime cron job
     print("\n  📅 Creating daytime cron job...")
     daytime_prompt = fill_template(TEMPLATE_DIR / "daytime_prompt.txt", replacements)
     day_job_id = create_hermes_cron(
@@ -131,7 +143,7 @@ def main():
     else:
         print(f"  ⚠️  Daytime cron creation failed — you may need to create it manually")
 
-    # 4. Create nightly cron job
+    # 5. Create nightly cron job
     print("\n  🌙 Creating nightly cron job...")
     nightly_prompt = fill_template(TEMPLATE_DIR / "nightly_prompt.txt", replacements)
     night_job_id = create_hermes_cron(
@@ -150,6 +162,8 @@ def main():
     print(f"\n🎉 Agent Heartbeat is set up!")
     print(f"   GOALS.md: {goals_path}")
     print(f"   JOURNAL.md: {journal_path}")
+    if primary_path.exists():
+        print(f"   PRIMARY.md: {primary_path} (immutable, read-only)")
     if day_job_id:
         print(f"   Daytime cron: {day_job_id} (schedule: {args.day_schedule})")
     if night_job_id:

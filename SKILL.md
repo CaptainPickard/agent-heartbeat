@@ -64,7 +64,7 @@ This creates:
 - **JOURNAL.md**: The agent's memory. Read at start of every session, appended at end of every session. Contains open threads for continuity, entries with what happened/found/thought, and room status.
 - **Open Threads**: Things the agent is actively pursuing. Checked at start of each session for continuity. When resolved, moved to closed threads.
 - **Clean Room Rule**: Agent cleans up temp files, scratch scripts, and bloat before finishing each session.
-- **Security Framework**: 7 rules protecting against prompt injection, secret exfiltration, identity file modification, recursive infrastructure, and reckless action.
+- **Security Framework**: 8 rules protecting against prompt injection, secret exfiltration, identity file modification, recursive infrastructure, and reckless action.
 
 ## Customization
 
