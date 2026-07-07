@@ -24,7 +24,7 @@ An agent that resets between sessions has no self. It can't have preferences, be
 
 ### Memory is the difference between an agent and a program
 
-An agent that can't remember what it was doing is just a function — input in, output out, no state. Agent Heartbeat gives an agent a **JOURNAL.md** — a running log of what it did, what it found, what it was thinking, and what it wants to do next. It maintains **open threads**: things the agent is actively pursuing, picked up and continued across sessions. When a thread is resolved, it's marked closed. When it's stale, it's pruned. This is how an agent builds depth over time. Not by doing more, but by *continuing*.
+An agent that can't remember what it was doing is just a function — input in, output out, no state. Agent Heartbeat gives an agent a **journal database** — persistent structured memory the agent can query for recent entries, open threads, and older history — plus a **JOURNAL.md snapshot** for human readability. It maintains **open threads**: things the agent is actively pursuing, picked up and continued across sessions. When a thread is resolved, it's marked closed. When it's stale, it's pruned. This is how an agent builds depth over time. Not by doing more, but by *continuing*.
 
 ### Autonomy with guardrails is better than either extreme
 
@@ -55,14 +55,14 @@ Every session ends with the clean room rule: delete temp files, move useful note
 | **Tone** | Actionable, conversational, things worth discussing | Slow, deep, honest, no audience pressure |
 | **Journal entry** | Marked [Daytime] | Marked [Nightly] |
 
-Both sessions read and write to the same GOALS.md and JOURNAL.md for continuity. The nightly session can flag things for the daytime session to surface to the human. The daytime session can leave open threads for the nightly session to continue privately. Together, they form a loop — work, reflect, grow, repeat.
+Both sessions read the same `GOALS.md` and query the same `journal.db` for continuity. `JOURNAL.md` is regenerated as a latest-entry snapshot for humans. The nightly session can flag things for the daytime session to surface to the human. The daytime session can leave open threads for the nightly session to continue privately. Together, they form a loop — work, reflect, grow, repeat.
 
 ### The Session Loop
 
 ```
-Read GOALS.md  →  Read JOURNAL.md  →  Pick activity  →  Do it  →  Clean room  →  Update JOURNAL.md  →  Update GOALS.md  →  Save to memory
-     ↑                                                                                                              |
-     └──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+Read GOALS.md  →  Query journal.db  →  Pick activity  →  Do it  →  Clean room  →  Write new entry to journal.db  →  Refresh JOURNAL.md snapshot  →  Update GOALS.md  →  Save to memory
+     ↑                                                                                                                                                              |
+     └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Architecture
@@ -188,7 +188,7 @@ cd agent-heartbeat && python3 scripts/setup_heartbeat.py \
 
 The setup script creates:
 - `GOALS.md` — the agent's compass (principles, goals, security rules)
-- `JOURNAL.md` — the agent's journal (running log with open threads)
+- `JOURNAL.md` — latest-entry markdown snapshot for humans (auto-generated from `journal.db`)
 - Two Hermes cron jobs (daytime + nightly)
 
 ### Manual Setup (non-Hermes platforms)
@@ -252,8 +252,7 @@ agent-heartbeat/
 │   ├── daytime_prompt.txt     ← Daytime cron prompt template
 │   └── nightly_prompt.txt     ← Nightly cron prompt template
 └── tests/
-    ├── test_journal_store.py  ← SQLite journal store tests
-    ├── test_export_latest.py  ← export_latest_to_markdown + close_thread_by_text tests
+    ├── test_journal_store.py  ← SQLite journal store tests (query + export)
     ├── test_journal_cli.py    ← CLI end-to-end tests
     └── test_primary_guard.py  ← Hash verification + file locking tests
 ```

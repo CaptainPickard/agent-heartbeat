@@ -14,7 +14,7 @@ Creates a two-session daily heartbeat for an AI agent:
 - **Daytime session** — conversational, delivers to human via email + thread
 - **Nightly session** — private, silent, output to local files
 
-Both sessions read `GOALS.md` (principles + goals) and `JOURNAL.md` (running log with open threads) for continuity, then pick an activity, execute it, clean up, and update the files.
+Both sessions read `GOALS.md` (principles + goals) and the journal database (`journal.db`, via `journal_cli.py read`) for continuity, then pick an activity, execute it, clean up, and update the journal DB plus any needed identity files.
 
 ## Setup
 
@@ -36,7 +36,7 @@ python3 {skill_dir}/scripts/setup_heartbeat.py \
 
 This creates:
 - `GOALS.md` — agent's compass (principles, goals, security rules)
-- `JOURNAL.md` — agent's journal (running log with open threads)
+- `JOURNAL.md` — latest-entry markdown snapshot for humans (auto-generated from the DB)
 - Two Hermes cron jobs (daytime + nightly)
 
 ### Manual setup (non-Hermes platforms)
@@ -91,5 +91,5 @@ After setup:
 1. Check that `GOALS.md` and `JOURNAL.md` exist in the workspace
 2. Run `hermes cron list` (or your platform equivalent) to verify both cron jobs are scheduled
 3. Trigger the first run manually to test: `hermes cron run <job_id>`
-4. After the first run, check that JOURNAL.md has a new entry appended
+4. After the first run, check that `journal.db` has a new entry and `JOURNAL.md` shows the latest-entry snapshot
 5. Check that GOALS.md was not corrupted or overwritten (only targeted edits)
