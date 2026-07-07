@@ -376,7 +376,10 @@ def close_thread_by_text(
 
     If closing_entry_id is None, uses the most recent entry ID.
     Returns True if a thread was closed, False if no match found.
+    Empty or whitespace-only search text returns False (avoids matching everything).
     """
+    if not thread_text or not thread_text.strip():
+        return False
     init_db(db_path)
     with _connect(db_path) as conn:
         if closing_entry_id is None:
@@ -403,6 +406,7 @@ def close_thread_by_text(
         )
         conn.commit()
         return True
+
 
 
 def _extract_section(lines: list[str], labels: list[str]) -> str | None:
