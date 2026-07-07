@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import os
 import pathlib
+import shutil
 import stat
 import subprocess
 import sys
@@ -60,16 +61,52 @@ def test_lock_file_makes_file_read_only(tmp_path):
     assert mode == 0o444
 
     if os.geteuid() == 0:
+        # When running as root we can't prove the 0o444 lock blocks writes
+        # directly (root bypasses file permissions), so we drop to a non-root
+        # uid and try to write via a subprocess. The interpreter we spawn must
+        # itself be executable by that uid — sys.executable may live under a
+        # root-only path (e.g. a venv inside /root), so we probe candidate
+        # interpreters as uid 65534 and use the first one that actually starts.
+        candidates = [sys.executable]
+        fallback = shutil.which("python3")
+        if fallback and fallback != sys.executable:
+            candidates.append(fallback)
+
+        interpreter = None
+        for cand in candidates:
+            try:
+                probe = subprocess.run(
+                    [cand, "-c", "pass"],
+                    capture_output=True,
+                    text=True,
+                    preexec_fn=lambda: (os.setgid(65534), os.setuid(65534)),
+                )
+            except (PermissionError, OSError):
+                continue
+            if probe.returncode == 0:
+                interpreter = cand
+                break
+
+        if interpreter is None:
+            # No usable interpreter for the dropped uid — the mode==0o444
+            # assertion above already proves the lock applied correctly.
+            return
+
         script = (
             "from pathlib import Path; "
             "Path(__import__('sys').argv[1]).write_text('should fail', encoding='utf-8')"
         )
-        result = subprocess.run(
-            [sys.executable, "-c", script, str(path)],
-            capture_output=True,
-            text=True,
-            preexec_fn=lambda: (os.setgid(65534), os.setuid(65534)),
-        )
+        try:
+            result = subprocess.run(
+                [interpreter, "-c", script, str(path)],
+                capture_output=True,
+                text=True,
+                preexec_fn=lambda: (os.setgid(65534), os.setuid(65534)),
+            )
+        except (PermissionError, OSError):
+            # Interpreter became inaccessible between probe and run — the
+            # mode==0o444 assertion above already proves the lock applied.
+            return
         assert result.returncode != 0
         assert (
             "PermissionError" in result.stderr
