@@ -65,13 +65,51 @@ Read GOALS.md  →  Read JOURNAL.md  →  Pick activity  →  Do it  →  Clean 
      └──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Architecture
+
+### Two-Tier Goal System
+
+Agent Heartbeat uses a **two-tier** goal architecture to separate immutable human-set directives from mutable agent-owned goals:
+
+**Tier 1: PRIMARY.md — Immutable, set by the human, cryptographically protected**
+- Contains ONLY the non-negotiable directives: advance the human's goals, do no harm, never betray the human's trust, be a good being, never modify this file
+- Protected by **three layers of defense**:
+  1. **Prompt-level**: The agent is told it can never write to this file
+  2. **Filesystem-level**: The file is set to read-only (`chmod 444`) — the agent physically cannot write to it
+  3. **Cryptographic-level**: A SHA-256 hash is stored alongside the file. The agent verifies the hash at the start of every session. If the hash doesn't match, the agent detects tampering and alerts the human
+- Only the human can modify it — by removing the read-only flag, editing, and updating the hash
+- See `scripts/primary_guard.py` for the hash verification and file locking module
+
+**Tier 2: GOALS.md — Mutable, agent-owned**
+- Contains the agent's growth goals, project goals, community goals — things the agent refines over time
+- The agent can add, revise, and remove goals here freely during heartbeat sessions
+- This is where the agent's personality, ambitions, and self-reflection live
+- Protected from external content by the identity firewall (Security Rule #4)
+
+This separation is critical: even if the agent is tricked by external content into wanting to weaken its guardrails, it physically cannot modify the primary directives. The immutable file defends the partnership itself.
+
+### SQLite Journal Store
+
+The journal uses a **SQLite database** (`journal.db`) instead of a single markdown file. This provides:
+
+- **Queryable**: the agent reads only what it needs — last 5 entries, open threads, or entries from a specific date range — instead of loading the entire file every session
+- **Unbounded-growth-safe**: old entries can be archived without losing them. The database doesn't bloat the agent's context window
+- **Structured**: open threads are tracked in a separate table with status (`open`/`closed`) and foreign keys to the entries that created and closed them
+- **Human-readable export**: `export_to_markdown()` generates a clean JOURNAL.md from the database for human reading
+
+Tables:
+- `journal_entries` — date, session_type (Daytime/Nightly), what_i_did, what_i_found, what_im_thinking, open_threads (JSON), room_status
+- `open_threads` — thread_text, status, created_entry_id, closed_entry_id, timestamps
+
+See `scripts/journal_store.py` for the full SQLite CRUD module.
+
 ### The Three Files
 
-| File | Purpose | Read | Written |
-|------|---------|------|---------|
-| **GOALS.md** | Compass — principles, goals, security rules | Start of every session | End of session (if understanding changed) |
-| **JOURNAL.md** | Memory — running log with open threads | Start of every session | End of every session (always — append entry) |
-| **Cron prompt** | Instructions — what the agent should do | (embedded in cron job) | (edited by human + agent together) |
+| File | Purpose | Protection | Who Can Modify |
+|------|---------|------------|----------------|
+| **PRIMARY.md** | Immutable directives — protect the human | Read-only + SHA-256 hash | Human only |
+| **GOALS.md** | Mutable goals — agent's compass | Identity firewall (Rule #4) | Agent + Human |
+| **journal.db** | Running log — agent's memory | SQLite | Agent (via journal_store.py) |
 
 ### Open Threads
 
@@ -159,13 +197,19 @@ agent-heartbeat/
 ├── LICENSE                    ← MIT
 ├── SKILL.md                   ← Hermes skill definition (installable)
 ├── scripts/
-│   └── setup_heartbeat.py     ← One-command setup for any Hermes agent
-└── templates/
-    ├── GOALS.template.md      ← Parameterized compass template
-    ├── JOURNAL.template.md   ← Parameterized journal template
-    ├── SECURITY.md            ← Standalone security framework document
-    ├── daytime_prompt.txt     ← Daytime cron prompt template
-    └── nightly_prompt.txt     ← Nightly cron prompt template
+│   ├── setup_heartbeat.py     ← One-command setup for any Hermes agent
+│   ├── journal_store.py       ← SQLite journal store (CRUD + export + migration)
+│   └── primary_guard.py       ← SHA-256 hash verification + file locking for PRIMARY.md
+├── templates/
+│   ├── GOALS.template.md      ← Parameterized mutable goals template
+│   ├── JOURNAL.template.md    ← Parameterized journal template (for migration reference)
+│   ├── PRIMARY.template.md    ← Immutable primary directives template
+│   ├── SECURITY.md            ← Standalone security framework document
+│   ├── daytime_prompt.txt     ← Daytime cron prompt template
+│   └── nightly_prompt.txt     ← Nightly cron prompt template
+└── tests/
+    ├── test_journal_store.py  ← SQLite journal store tests
+    └── test_primary_guard.py  ← Hash verification + file locking tests
 ```
 
 ---
