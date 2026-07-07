@@ -90,26 +90,60 @@ This separation is critical: even if the agent is tricked by external content in
 
 ### SQLite Journal Store
 
-The journal uses a **SQLite database** (`journal.db`) instead of a single markdown file. This provides:
+The journal uses a **SQLite database** (`journal.db`) as the **source of truth** — all entries go to the DB. A companion `JOURNAL.md` file is overwritten with only the latest entry + current open/closed threads, so a human can see what the agent wrote today without scrolling through history.
+
+This provides:
 
 - **Queryable**: the agent reads only what it needs — last 5 entries, open threads, entries from a specific date range, entries by session type (Daytime vs Nightly), or a single entry by id — instead of loading the entire file every session
 - **Unbounded-growth-safe**: old entries can be archived without losing them. The database doesn't bloat the agent's context window
 - **Structured**: open threads are tracked in a separate table with status (`open`/`closed`) and foreign keys to the entries that created and closed them
-- **Human-readable export**: `export_to_markdown()` generates a clean JOURNAL.md from the database for human reading
+- **Human-readable snapshot**: `export_latest_to_markdown()` overwrites JOURNAL.md with just the latest entry + threads, so the human sees today's output at a glance
+- **Full export**: `export_to_markdown()` generates a complete JOURNAL.md with all entries if needed
 
-Query API:
+### Journal CLI
+
+A command-line interface (`scripts/journal_cli.py`) lets heartbeat prompts interact with the journal store via simple terminal commands:
+
+```bash
+# Read recent entries + open threads (used at session start)
+python3 scripts/journal_cli.py read --db /path/to/journal.db --limit 5
+
+# Add a journal entry (writes to DB + overwrites JOURNAL.md with latest entry)
+python3 scripts/journal_cli.py add \
+  --db /path/to/journal.db \
+  --md /path/to/JOURNAL.md \
+  --date "2026-07-07" \
+  --session-type "Daytime" \
+  --title "Your Title" \
+  --what-i-did "Summary" \
+  --what-i-found "Findings" \
+  --what-im-thinking "Reflection" \
+  --open-threads "thread1,thread2" \
+  --room-status "Clean."
+
+# Close an open thread by text match
+python3 scripts/journal_cli.py close-thread --db /path/to/journal.db --thread-text "thread1"
+
+# Regenerate the JOURNAL.md snapshot from the DB
+python3 scripts/journal_cli.py export-latest --db /path/to/journal.db --md /path/to/JOURNAL.md
+```
+
+Query API (in `scripts/journal_store.py`):
 - `get_recent_entries(db_path, limit)` — newest N entries
 - `get_entries_by_date_range(db_path, start, end)` — entries within a date range
 - `get_entries_by_session_type(db_path, session_type, limit=None)` — filter by Daytime or Nightly (case-insensitive)
 - `get_entry_by_id(db_path, entry_id)` — single entry by primary key
 - `get_open_threads(db_path)` — all open threads
-- `close_thread(db_path, thread_id, closing_entry_id)` — mark a thread resolved
+- `close_thread(db_path, thread_id, closing_entry_id)` — mark a thread resolved by ID
+- `close_thread_by_text(db_path, thread_text, closing_entry_id=None)` — mark a thread resolved by text match (case-insensitive substring)
+- `export_to_markdown(db_path, output_path)` — full journal export (all entries + threads)
+- `export_latest_to_markdown(db_path, output_path)` — snapshot export (latest entry only + threads)
 
 Tables:
 - `journal_entries` — date, session_type (Daytime/Nightly), what_i_did, what_i_found, what_im_thinking, open_threads (JSON), room_status
 - `open_threads` — thread_text, status, created_entry_id, closed_entry_id, timestamps
 
-See `scripts/journal_store.py` for the full SQLite CRUD module.
+See `scripts/journal_store.py` for the full SQLite CRUD module and `scripts/journal_cli.py` for the CLI.
 
 ### The Three Files
 
@@ -117,7 +151,8 @@ See `scripts/journal_store.py` for the full SQLite CRUD module.
 |------|---------|------------|----------------|
 | **PRIMARY.md** | Immutable directives — protect the human | Read-only + SHA-256 hash | Human only |
 | **GOALS.md** | Mutable goals — agent's compass | Identity firewall (Rule #4) | Agent + Human |
-| **journal.db** | Running log — agent's memory | SQLite | Agent (via journal_store.py) |
+| **journal.db** | Running log — agent's memory (source of truth) | SQLite | Agent (via journal_store.py / journal_cli.py) |
+| **JOURNAL.md** | Latest-entry snapshot — human's quick view | Overwritten on each entry | Agent (auto-generated from DB) |
 
 ### Open Threads
 
@@ -207,6 +242,7 @@ agent-heartbeat/
 ├── scripts/
 │   ├── setup_heartbeat.py     ← One-command setup for any Hermes agent
 │   ├── journal_store.py       ← SQLite journal store (CRUD + export + migration)
+│   ├── journal_cli.py         ← CLI for journal read/add/close-thread/export-latest
 │   └── primary_guard.py       ← SHA-256 hash verification + file locking for PRIMARY.md
 ├── templates/
 │   ├── GOALS.template.md      ← Parameterized mutable goals template
@@ -217,6 +253,8 @@ agent-heartbeat/
 │   └── nightly_prompt.txt     ← Nightly cron prompt template
 └── tests/
     ├── test_journal_store.py  ← SQLite journal store tests
+    ├── test_export_latest.py  ← export_latest_to_markdown + close_thread_by_text tests
+    ├── test_journal_cli.py    ← CLI end-to-end tests
     └── test_primary_guard.py  ← Hash verification + file locking tests
 ```
 

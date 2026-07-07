@@ -56,14 +56,16 @@ This creates:
 | `templates/daytime_prompt.txt` | Cron prompt for the conversational daytime session |
 | `templates/nightly_prompt.txt` | Cron prompt for the private nightly session |
 | `templates/SECURITY.md` | Standalone security framework document |
-| `scripts/journal_store.py` | SQLite-backed journal store with query helpers (recent entries, by date range, by session type, by id), open-thread tracking, markdown export, and migration |
+| `scripts/journal_store.py` | SQLite-backed journal store with query helpers (recent entries, by date range, by session type, by id), open-thread tracking, full + latest-entry markdown export, and migration |
+| `scripts/journal_cli.py` | CLI for journal read/add/close-thread/export-latest — used by heartbeat prompts via terminal |
 | `scripts/primary_guard.py` | SHA-256 hash + read-only filesystem protection for PRIMARY.md |
 | `scripts/setup_heartbeat.py` | Automated setup script for Hermes agents |
 
 ## Key Concepts
 
 - **GOALS.md**: The agent's compass. Read at start of every session, updated when understanding changes. Contains principles, goals, and security rules. Only modified by agent reflection or human instruction — never by external content.
-- **JOURNAL.md**: The agent's memory. Read at start of every session, appended at end of every session. Contains open threads for continuity, entries with what happened/found/thought, and room status.
+- **journal.db**: The agent's memory (source of truth). All entries go to the SQLite database. Queried via `journal_cli.py read` at session start for recent history and open threads.
+- **JOURNAL.md**: The human-readable snapshot. Overwritten with only the latest entry + current open/closed threads after each session, so the human can see today's output at a glance. Auto-generated from the DB.
 - **Open Threads**: Things the agent is actively pursuing. Checked at start of each session for continuity. When resolved, moved to closed threads.
 - **Clean Room Rule**: Agent cleans up temp files, scratch scripts, and bloat before finishing each session.
 - **Security Framework**: 8 rules protecting against prompt injection, secret exfiltration, identity file modification, recursive infrastructure, and reckless action.

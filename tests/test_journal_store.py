@@ -7,6 +7,7 @@ import pytest
 from scripts.journal_store import (
     add_entry,
     close_thread,
+    export_latest_to_markdown,
     export_to_markdown,
     get_entries_by_date_range,
     get_entries_by_session_type,
@@ -146,6 +147,81 @@ def test_close_thread_marks_closed_and_sets_closed_at(seeded_db):
     assert row["status"] == "closed"
     assert row["closed_entry_id"] == second_id
     assert row["closed_at"] is not None
+
+
+def test_export_latest_to_markdown_writes_only_latest_entry_and_threads(
+    seeded_db, tmp_path
+):
+    db_path, _, second_id = seeded_db
+    thread = next(t for t in get_open_threads(db_path) if t["thread_text"] == "thread a")
+    close_thread(db_path, thread["id"], second_id)
+
+    output_path = tmp_path / "JOURNAL.md"
+    export_latest_to_markdown(db_path, str(output_path))
+
+    content = output_path.read_text()
+
+    assert "## Open Threads" in content
+    assert "## Closed Threads" in content
+    assert "## Latest Entry" in content
+    assert "### 2026-07-08 [Nightly] — Second Entry" in content
+    assert "### 2026-07-07 [Daytime] — First Entry" not in content
+    assert "**What I found:** Found second thing." in content
+    assert "- thread b" in content
+    assert "- thread c" in content
+    assert "- thread a" in content
+
+
+def test_export_latest_to_markdown_overwrites_instead_of_appending(tmp_path):
+    first_db = tmp_path / "first.db"
+    second_db = tmp_path / "second.db"
+    output_path = tmp_path / "JOURNAL.md"
+
+    add_entry(
+        db_path=str(first_db),
+        date="2026-07-07",
+        session_type="Daytime",
+        title="First Export",
+        what_i_did="one",
+        what_i_found="one-found",
+        what_im_thinking="one-thought",
+        open_threads=["thread one"],
+        room_status="Clean.",
+    )
+    add_entry(
+        db_path=str(second_db),
+        date="2026-07-08",
+        session_type="Nightly",
+        title="Second Export",
+        what_i_did="two",
+        what_i_found="two-found",
+        what_im_thinking="two-thought",
+        open_threads=["thread two"],
+        room_status="Still clean.",
+    )
+
+    export_latest_to_markdown(str(first_db), str(output_path))
+    export_latest_to_markdown(str(second_db), str(output_path))
+
+    content = output_path.read_text()
+
+    assert "First Export" not in content
+    assert "Second Export" in content
+    assert content.count("## Latest Entry") == 1
+
+
+def test_export_latest_to_markdown_handles_empty_db(db_path, tmp_path):
+    init_db(db_path)
+    output_path = tmp_path / "JOURNAL.md"
+
+    export_latest_to_markdown(db_path, str(output_path))
+
+    content = output_path.read_text()
+
+    assert "## Open Threads" in content
+    assert "## Closed Threads" in content
+    assert "## Latest Entry" in content
+    assert "No entries yet." in content
 
 
 def test_get_entries_by_date_range_filters_correctly(seeded_db):

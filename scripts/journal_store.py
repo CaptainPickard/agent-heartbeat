@@ -252,19 +252,36 @@ def get_entry_count(db_path: str) -> int:
     return int(row["count"])
 
 
-def export_to_markdown(db_path: str, output_path: str) -> None:
-    init_db(db_path)
-    with _connect(db_path) as conn:
-        open_rows = conn.execute(
-            "SELECT thread_text FROM open_threads WHERE status = 'open' ORDER BY id ASC"
-        ).fetchall()
-        closed_rows = conn.execute(
-            "SELECT thread_text FROM open_threads WHERE status = 'closed' ORDER BY id ASC"
-        ).fetchall()
-        entry_rows = conn.execute(
-            "SELECT * FROM journal_entries ORDER BY date ASC, id ASC"
-        ).fetchall()
+def _format_entry_block(entry: dict[str, Any]) -> list[str]:
+    """Render a single journal entry as markdown lines (header + sections)."""
+    title = entry.get("title") or "Untitled"
+    session_type = _normalize_session_type(entry.get("session_type"))
+    lines = [f"### {entry['date']} [{session_type}] — {title}", ""]
 
+    if entry.get("what_i_did"):
+        lines.append(f"**What I did:** {entry['what_i_did']}")
+        lines.append("")
+    if entry.get("what_i_found"):
+        lines.append(f"**What I found:** {entry['what_i_found']}")
+        lines.append("")
+    if entry.get("what_im_thinking"):
+        lines.append(f"**What I'm thinking:** {entry['what_im_thinking']}")
+        lines.append("")
+    if entry.get("open_threads"):
+        lines.append("**Open threads:**")
+        for thread_text in entry["open_threads"]:
+            lines.append(f"- {thread_text}")
+        lines.append("")
+    if entry.get("room_status"):
+        lines.append(f"**Room status:** {entry['room_status']}")
+        lines.append("")
+    return lines
+
+
+def _format_threads_sections(
+    open_rows: list[sqlite3.Row], closed_rows: list[sqlite3.Row]
+) -> list[str]:
+    """Render the Open/Closed Threads header sections used by both exporters."""
     lines = [
         "## Open Threads",
         "",
@@ -291,37 +308,101 @@ def export_to_markdown(db_path: str, output_path: str) -> None:
         lines.extend(f"- {row['thread_text']}" for row in closed_rows)
     else:
         lines.append("- **(none yet)**")
+    return lines
 
+
+def export_to_markdown(db_path: str, output_path: str) -> None:
+    """Export the full journal (all entries + threads) to a markdown file."""
+    init_db(db_path)
+    with _connect(db_path) as conn:
+        open_rows = conn.execute(
+            "SELECT thread_text FROM open_threads WHERE status = 'open' ORDER BY id ASC"
+        ).fetchall()
+        closed_rows = conn.execute(
+            "SELECT thread_text FROM open_threads WHERE status = 'closed' ORDER BY id ASC"
+        ).fetchall()
+        entry_rows = conn.execute(
+            "SELECT * FROM journal_entries ORDER BY date ASC, id ASC"
+        ).fetchall()
+
+    lines = _format_threads_sections(open_rows, closed_rows)
     lines.extend(["", "---", "", "## Entries", ""])
 
     for index, row in enumerate(entry_rows):
         entry = _row_to_entry(row)
-        title = entry.get("title") or "Untitled"
-        session_type = _normalize_session_type(entry.get("session_type"))
-        lines.append(f"### {entry['date']} [{session_type}] — {title}")
-        lines.append("")
-
-        if entry.get("what_i_did"):
-            lines.append(f"**What I did:** {entry['what_i_did']}")
-            lines.append("")
-        if entry.get("what_i_found"):
-            lines.append(f"**What I found:** {entry['what_i_found']}")
-            lines.append("")
-        if entry.get("what_im_thinking"):
-            lines.append(f"**What I'm thinking:** {entry['what_im_thinking']}")
-            lines.append("")
-        if entry.get("open_threads"):
-            lines.append("**Open threads:**")
-            for thread_text in entry["open_threads"]:
-                lines.append(f"- {thread_text}")
-            lines.append("")
-        if entry.get("room_status"):
-            lines.append(f"**Room status:** {entry['room_status']}")
-            lines.append("")
+        lines.extend(_format_entry_block(entry))
         if index != len(entry_rows) - 1:
             lines.extend(["---", ""])
 
     Path(output_path).write_text("\n".join(lines).rstrip() + "\n")
+
+
+def export_latest_to_markdown(db_path: str, output_path: str) -> None:
+    """Overwrite output_path with open/closed threads + ONLY the latest entry.
+
+    The database is the source of truth (full history). This produces a
+    human-readable snapshot so a human can see what the agent wrote today
+    without scrolling through the entire journal.
+    """
+    init_db(db_path)
+    with _connect(db_path) as conn:
+        open_rows = conn.execute(
+            "SELECT thread_text FROM open_threads WHERE status = 'open' ORDER BY id ASC"
+        ).fetchall()
+        closed_rows = conn.execute(
+            "SELECT thread_text FROM open_threads WHERE status = 'closed' ORDER BY id ASC"
+        ).fetchall()
+        latest_row = conn.execute(
+            "SELECT * FROM journal_entries ORDER BY date DESC, id DESC LIMIT 1"
+        ).fetchone()
+
+    lines = _format_threads_sections(open_rows, closed_rows)
+    lines.extend(["", "---", "", "## Latest Entry", ""])
+
+    if latest_row is not None:
+        entry = _row_to_entry(latest_row)
+        lines.extend(_format_entry_block(entry))
+    else:
+        lines.append("No entries yet.")
+        lines.append("")
+
+    Path(output_path).write_text("\n".join(lines).rstrip() + "\n")
+
+
+def close_thread_by_text(
+    db_path: str, thread_text: str, closing_entry_id: int | None = None
+) -> bool:
+    """Close an open thread by text match (substring, case-insensitive).
+
+    If closing_entry_id is None, uses the most recent entry ID.
+    Returns True if a thread was closed, False if no match found.
+    """
+    init_db(db_path)
+    with _connect(db_path) as conn:
+        if closing_entry_id is None:
+            row = conn.execute(
+                "SELECT id FROM journal_entries ORDER BY date DESC, id DESC LIMIT 1"
+            ).fetchone()
+            if row is None:
+                return False
+            closing_entry_id = int(row["id"])
+
+        # Find the first open thread containing the search text (case-insensitive)
+        match = conn.execute(
+            "SELECT id FROM open_threads WHERE status = 'open' "
+            "AND thread_text LIKE ? COLLATE NOCASE ORDER BY id ASC LIMIT 1",
+            (f"%{thread_text}%",),
+        ).fetchone()
+        if match is None:
+            return False
+
+        conn.execute(
+            "UPDATE open_threads SET status = 'closed', closed_entry_id = ?, "
+            "closed_at = datetime('now') WHERE id = ?",
+            (closing_entry_id, int(match["id"])),
+        )
+        conn.commit()
+        return True
 
 
 def _extract_section(lines: list[str], labels: list[str]) -> str | None:
