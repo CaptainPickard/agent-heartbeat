@@ -56,6 +56,8 @@ This creates:
 | `templates/daytime_prompt.txt` | Cron prompt for the conversational daytime session |
 | `templates/nightly_prompt.txt` | Cron prompt for the private nightly session |
 | `templates/SECURITY.md` | Standalone security framework document |
+| `scripts/journal_store.py` | SQLite-backed journal store with query helpers (recent entries, by date range, by session type, by id), open-thread tracking, markdown export, and migration |
+| `scripts/primary_guard.py` | SHA-256 hash + read-only filesystem protection for PRIMARY.md |
 | `scripts/setup_heartbeat.py` | Automated setup script for Hermes agents |
 
 ## Key Concepts

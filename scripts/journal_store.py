@@ -212,6 +212,39 @@ def get_entries_by_date_range(
     return [_row_to_entry(row) for row in rows]
 
 
+def get_entries_by_session_type(
+    db_path: str, session_type: str, limit: int | None = None
+) -> list[dict[str, Any]]:
+    """Return entries matching a session type ('Daytime' or 'Nightly').
+
+    Matching is case-insensitive, so callers can pass 'nightly', 'Nightly',
+    'DAYTIME', etc. Results are newest-first to match get_recent_entries.
+    """
+    normalized = _normalize_session_type(session_type)
+    init_db(db_path)
+    sql = (
+        "SELECT * FROM journal_entries WHERE session_type = ? COLLATE NOCASE "
+        "ORDER BY date DESC, id DESC"
+    )
+    params: list = [normalized]
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(int(limit))
+    with _connect(db_path) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [_row_to_entry(row) for row in rows]
+
+
+def get_entry_by_id(db_path: str, entry_id: int) -> dict[str, Any] | None:
+    """Return a single entry by its primary key, or None if not found."""
+    init_db(db_path)
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM journal_entries WHERE id = ?", (int(entry_id),)
+        ).fetchone()
+    return _row_to_entry(row) if row else None
+
+
 def get_entry_count(db_path: str) -> int:
     init_db(db_path)
     with _connect(db_path) as conn:

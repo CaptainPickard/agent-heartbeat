@@ -92,10 +92,18 @@ This separation is critical: even if the agent is tricked by external content in
 
 The journal uses a **SQLite database** (`journal.db`) instead of a single markdown file. This provides:
 
-- **Queryable**: the agent reads only what it needs — last 5 entries, open threads, or entries from a specific date range — instead of loading the entire file every session
+- **Queryable**: the agent reads only what it needs — last 5 entries, open threads, entries from a specific date range, entries by session type (Daytime vs Nightly), or a single entry by id — instead of loading the entire file every session
 - **Unbounded-growth-safe**: old entries can be archived without losing them. The database doesn't bloat the agent's context window
 - **Structured**: open threads are tracked in a separate table with status (`open`/`closed`) and foreign keys to the entries that created and closed them
 - **Human-readable export**: `export_to_markdown()` generates a clean JOURNAL.md from the database for human reading
+
+Query API:
+- `get_recent_entries(db_path, limit)` — newest N entries
+- `get_entries_by_date_range(db_path, start, end)` — entries within a date range
+- `get_entries_by_session_type(db_path, session_type, limit=None)` — filter by Daytime or Nightly (case-insensitive)
+- `get_entry_by_id(db_path, entry_id)` — single entry by primary key
+- `get_open_threads(db_path)` — all open threads
+- `close_thread(db_path, thread_id, closing_entry_id)` — mark a thread resolved
 
 Tables:
 - `journal_entries` — date, session_type (Daytime/Nightly), what_i_did, what_i_found, what_im_thinking, open_threads (JSON), room_status

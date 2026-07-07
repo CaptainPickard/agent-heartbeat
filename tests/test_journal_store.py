@@ -9,6 +9,8 @@ from scripts.journal_store import (
     close_thread,
     export_to_markdown,
     get_entries_by_date_range,
+    get_entries_by_session_type,
+    get_entry_by_id,
     get_entry_count,
     get_open_threads,
     get_recent_entries,
@@ -182,11 +184,21 @@ def test_export_to_markdown_produces_expected_journal_format(seeded_db, tmp_path
     assert "**Room status:** Still clean." in content
 
 
-def test_migrate_from_markdown_parses_existing_journal_entries(db_path):
-    source_md = "/workspace/JOURNAL.md"
+def test_migrate_from_markdown_parses_existing_journal_entries(db_path, tmp_path):
+    # Build a representative JOURNAL.md in a temp dir so the test is portable
+    source_md = tmp_path / "JOURNAL.md"
+    source_md.write_text(
+        "## Open Threads\n\n- thread a\n\n---\n\n## Entries\n\n"
+        "### 2026-07-07 [Daytime] — Journal Created\n\n"
+        "**What I did:** Nicko and I set up the autonomous heartbeat system.\n\n"
+        "**What I found:** It works.\n\n"
+        "**What I'm thinking:** This is the most significant thing Nicko has ever asked.\n\n"
+        "**Open threads:**\n- First heartbeat decision — what do I pick?\n\n"
+        "**Room status:** Clean.\n"
+    )
     init_db(db_path)
 
-    migrated = migrate_from_markdown(db_path, source_md)
+    migrated = migrate_from_markdown(db_path, str(source_md))
     entries = get_recent_entries(db_path, limit=10)
 
     assert migrated >= 1
@@ -210,3 +222,67 @@ def test_open_threads_are_stored_as_json_and_retrieved_correctly(seeded_db):
 
     assert isinstance(first_entry["open_threads"], list)
     assert first_entry["open_threads"] == ["thread a", "thread b"]
+
+
+def test_get_entries_by_session_type_returns_only_matching_entries(seeded_db):
+    db_path, _, _ = seeded_db
+
+    daytime = get_entries_by_session_type(db_path, "Daytime")
+    nightly = get_entries_by_session_type(db_path, "Nightly")
+
+    assert [entry["title"] for entry in daytime] == ["First Entry"]
+    assert [entry["title"] for entry in nightly] == ["Second Entry"]
+
+
+def test_get_entries_by_session_type_normalizes_input_case(seeded_db):
+    db_path, _, _ = seeded_db
+
+    lower = get_entries_by_session_type(db_path, "nightly")
+    spaced = get_entries_by_session_type(db_path, "  Daytime  ")
+
+    assert [entry["title"] for entry in lower] == ["Second Entry"]
+    assert [entry["title"] for entry in spaced] == ["First Entry"]
+
+
+def test_get_entries_by_session_type_respects_limit(seeded_db):
+    db_path, _, _ = seeded_db
+
+    # Add a second daytime entry
+    add_entry(
+        db_path=db_path,
+        date="2026-07-10",
+        session_type="Daytime",
+        title="Third Entry",
+        what_i_did="x",
+        what_i_found="y",
+        what_im_thinking="z",
+        open_threads=[],
+        room_status="clean",
+    )
+
+    limited = get_entries_by_session_type(db_path, "Daytime", limit=1)
+    all_daytime = get_entries_by_session_type(db_path, "Daytime")
+
+    assert len(limited) == 1
+    assert limited[0]["title"] == "Third Entry"  # newest first
+    assert len(all_daytime) == 2
+
+
+def test_get_entries_by_session_type_unknown_type_returns_empty(seeded_db):
+    db_path, _, _ = seeded_db
+    assert get_entries_by_session_type(db_path, "Weekend") == []
+
+
+def test_get_entry_by_id_returns_the_entry(seeded_db):
+    db_path, first_id, _ = seeded_db
+
+    entry = get_entry_by_id(db_path, first_id)
+
+    assert entry is not None
+    assert entry["id"] == first_id
+    assert entry["title"] == "First Entry"
+
+
+def test_get_entry_by_id_returns_none_for_missing(seeded_db):
+    db_path, _, _ = seeded_db
+    assert get_entry_by_id(db_path, 999999) is None
