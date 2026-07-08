@@ -60,6 +60,44 @@ This creates:
 | `scripts/journal_cli.py` | CLI for journal read/add/close-thread/export-latest — used by heartbeat prompts via terminal |
 | `scripts/primary_guard.py` | SHA-256 hash + read-only filesystem protection for PRIMARY.md |
 | `scripts/setup_heartbeat.py` | Automated setup script for Hermes agents |
+| `scripts/graph_builder.py` | Standalone memory graph payload builder for journal, goals, memory, skills, wiki, docs, and codebases |
+| `scripts/graph_server.py` | Standalone HTTP server exposing `/api/memory-graph` plus `graph/graph.html` |
+| `graph/graph.html` | Browser frontend for the force-directed memory graph |
+| `graph/vendor/d3/d3.v7.min.js` | Vendored D3 runtime for the standalone graph page |
+| `docs/honcho-integration.md` | Optional extension guide for merging Honcho conclusions/peers/sessions into the graph |
+
+## Memory Graph
+
+Agent Heartbeat ships a standalone memory graph feature that reads local files and serves a force-directed graph UI.
+
+### What it visualizes
+- `journal-entry` nodes from `journal.db`
+- `goals` node from `GOALS.md`
+- `memory`, `user`, and `soul` identity nodes from workspace memory files
+- `skill` nodes from `SKILL.md` directories
+- `wiki` nodes from a wiki tree (`entities/`, `concepts/`, `comparisons/`, `queries/`)
+- `document` nodes from docs markdown
+- `codebase` summary nodes from one or more repositories
+
+### Run it
+
+```bash
+python3 {skill_dir}/scripts/graph_server.py \
+  --workspace /path/to/workspace \
+  --journal-db /path/to/workspace/journal.db \
+  --skills-dir /path/to/skills \
+  --wiki-path /path/to/wiki \
+  --docs-path /path/to/docs \
+  --codebase-paths /path/to/project-a,/path/to/project-b \
+  --port 8790
+```
+
+Open `http://localhost:8790` in a browser.
+
+### Optional extras
+- `pip install .[graph]` enables PyYAML frontmatter parsing.
+- `pip install .[codebase]` enables `pygount` LOC/language summaries for codebases.
+- See `docs/honcho-integration.md` to merge optional Honcho data.
 
 ## Key Concepts
 
