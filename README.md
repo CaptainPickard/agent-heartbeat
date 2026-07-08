@@ -80,18 +80,18 @@ Both sessions read the same `GOALS.md` and query the same `journal.db` for conti
 
 ```mermaid
 graph TD
-    A[🌅 Session starts] --> B[📖 Read GOALS.md]
-    B --> C[🗄️ Query journal.db<br/>for recent entries<br/>& open threads]
-    C --> D{🤔 Pick activity}
-    D --> E[☀️ Daytime: collaborate<br/>with humans]
-    D --> F[🌙 Nightly: deep research<br/>& reflection]
-    E --> G[🧹 Clean room<br/>delete temp files]
+    A[Session starts] --> B[Read GOALS.md]
+    B --> C[Query journal.db<br/>for recent entries<br/>and open threads]
+    C --> D{Pick activity}
+    D --> E[Daytime: collaborate<br/>with humans]
+    D --> F[Nightly: deep research<br/>and reflection]
+    E --> G[Clean room<br/>delete temp files]
     F --> G
-    G --> H[📝 Write new entry<br/>to journal.db]
-    H --> I[📄 Refresh JOURNAL.md<br/>snapshot for humans]
-    I --> J[🎯 Update GOALS.md<br/>if understanding changed]
-    J --> K[💾 Save to memory]
-    K --> L[💤 Session ends]
+    G --> H[Write new entry<br/>to journal.db]
+    H --> I[Refresh JOURNAL.md<br/>snapshot for humans]
+    I --> J[Update GOALS.md<br/>if understanding changed]
+    J --> K[Save to memory]
+    K --> L[Session ends]
     L -.->|Next scheduled session| A
 ```
 
