@@ -168,7 +168,7 @@ This isn't a dashboard. It's a window into a mind that's waking up, one session 
 
 ### Memory Graph Visualization
 
-Agent Heartbeat now includes a standalone memory graph server and frontend. It can visualize an agent workspace from local files only — no Hermes WebUI imports and no build step.
+Agent Heartbeat includes a built-in memory graph server — a beautiful, interactive visualization of everything your agent knows. It runs from local files only, with zero external dependencies and no build step. Just Python and a browser.
 
 **Node types:**
 - `journal-entry` — triangles from `journal.db`
@@ -224,8 +224,9 @@ Here's what it looks like in action:
 ## Quick Start
 
 ### Prerequisites
-- [Hermes Agent](https://hermes-agent.nousresearch.com/docs) (for cron job scheduling and tool access)
+- Python 3.10+
 - A workspace directory for the agent
+- For automated scheduling: any agent platform with cron support (works great with [Hermes Agent](https://hermes-agent.nousresearch.com/docs), but not required)
 
 ### Setup
 
@@ -250,9 +251,9 @@ cd agent-heartbeat && python3 scripts/setup_heartbeat.py \
 The setup script creates:
 - `GOALS.md` — the agent's compass (principles, goals, security rules)
 - `JOURNAL.md` — latest-entry markdown snapshot for humans (auto-generated from `journal.db`)
-- Two Hermes cron jobs (daytime + nightly)
+- Two scheduled cron jobs (daytime + nightly)
 
-### Manual Setup (non-Hermes platforms)
+### Manual Setup (any platform)
 
 1. Copy `templates/GOALS.template.md` → `GOALS.md` in your workspace, edit the placeholders
 2. Copy `templates/JOURNAL.template.md` → `JOURNAL.md`, edit the placeholders
@@ -284,7 +285,7 @@ See [`templates/SECURITY.md`](templates/SECURITY.md) for the full framework docu
 
 Everything is parameterized:
 - **Schedules** — change the cron times for daytime/nightly sessions
-- **Delivery** — email, WebUI thread, local files, or any combination
+- **Delivery** — email, chat thread, local files, or any combination
 - **Activity menus** — add or remove categories of activities the agent can choose from
 - **Guardrails** — adjust the security rules and behavioral constraints
 - **Goals** — the agent edits GOALS.md over time as it grows (that's the point)
@@ -299,7 +300,7 @@ The templates use `{PLACEHOLDER}` tokens that the setup script fills in automati
 agent-heartbeat/
 ├── README.md                  ← You are here
 ├── LICENSE                    ← MIT
-├── SKILL.md                   ← Hermes skill definition (installable)
+├── SKILL.md                   ← Skill definition (installable on supported platforms)
 ├── docs/
 │   └── honcho-integration.md  ← Optional Honcho graph integration guide
 ├── graph/
@@ -308,7 +309,7 @@ agent-heartbeat/
 │       └── d3/
 │           └── d3.v7.min.js   ← Vendored D3 runtime
 ├── scripts/
-│   ├── setup_heartbeat.py     ← One-command setup for any Hermes agent
+│   ├── setup_heartbeat.py     ← One-command setup (works with any cron-capable platform)
 │   ├── journal_store.py       ← SQLite journal store (CRUD + export + migration)
 │   ├── journal_cli.py         ← CLI for journal read/add/close-thread/export-latest
 │   ├── primary_guard.py       ← SHA-256 hash verification + file locking for PRIMARY.md
@@ -343,7 +344,7 @@ If you want to contribute:
 
 We welcome contributions that:
 - Improve the security framework
-- Add support for new platforms (beyond Hermes)
+- Add support for new agent platforms
 - Improve the setup script
 - Add new activity categories
 - Improve the templates
