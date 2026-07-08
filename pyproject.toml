@@ -10,6 +10,8 @@ authors = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+graph = ["pyyaml>=6.0"]
+codebase = ["pygount>=1.5"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

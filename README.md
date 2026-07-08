@@ -158,6 +158,59 @@ See `scripts/journal_store.py` for the full SQLite CRUD module and `scripts/jour
 
 The journal maintains an "Open Threads" section — things the agent is actively pursuing. At the start of each session, the agent checks this list and can continue from where it left off. When a thread is resolved, it moves to "Closed Threads." This is how the agent builds depth across sessions. Instead of starting fresh every time, it *continues*.
 
+### Memory Graph Visualization
+
+Agent Heartbeat now includes a standalone memory graph server and frontend. It can visualize an agent workspace from local files only — no Hermes WebUI imports and no build step.
+
+**Node types:**
+- `journal-entry` — triangles from `journal.db`
+- `skill` — circles from `SKILL.md` directories
+- `wiki` — hexagons from wiki pages
+- `document` — blue rounded squares from docs markdown
+- `codebase` — purple squares summarizing repositories
+- `goals` — amber star from `GOALS.md`
+- `memory` / `user` / `soul` — memory-family nodes from local identity files
+
+**Launch the graph server:**
+
+```bash
+python3 scripts/graph_server.py \
+  --workspace /path/to/workspace \
+  --journal-db /path/to/workspace/journal.db \
+  --skills-dir /path/to/skills \
+  --wiki-path /path/to/wiki \
+  --docs-path /path/to/docs \
+  --codebase-paths /path/to/project-a,/path/to/project-b \
+  --port 8790
+```
+
+Then open `http://localhost:8790`.
+
+**Optional dependencies:**
+- `pip install .[graph]` for PyYAML-based frontmatter parsing
+- `pip install .[codebase]` for `pygount` codebase metrics
+
+**Optional Honcho integration:**
+See [`docs/honcho-integration.md`](docs/honcho-integration.md) for adding Honcho conclusions, peers, and sessions as an extra graph layer.
+
+Here's what it looks like in action:
+
+![Graph Overview](graph/screenshots/graph-overview.jpg)
+
+*The full force-directed graph — clusters of skills, memories, journal entries, and wiki pages connected by cross-reference edges.*
+
+![Node Types](graph/screenshots/graph-node-types.jpg)
+
+*Different node types are rendered as distinct shapes: circles (skills), squares (memories), triangles (journal entries), diamonds (user/soul), and hexagons (wiki pages).*
+
+![Detail Panel](graph/screenshots/graph-detail-panel.jpg)
+
+*Click any node to open the sliding detail panel — semi-transparent, themed, with type badges and metadata.*
+
+![Detail Content](graph/screenshots/graph-detail-content.jpg)
+
+*The detail panel shows full content, tags, open threads, and connections count for the selected node.*
+
 ---
 
 ## Quick Start
@@ -239,11 +292,20 @@ agent-heartbeat/
 ├── README.md                  ← You are here
 ├── LICENSE                    ← MIT
 ├── SKILL.md                   ← Hermes skill definition (installable)
+├── docs/
+│   └── honcho-integration.md  ← Optional Honcho graph integration guide
+├── graph/
+│   ├── graph.html             ← Standalone memory graph frontend
+│   └── vendor/
+│       └── d3/
+│           └── d3.v7.min.js   ← Vendored D3 runtime
 ├── scripts/
 │   ├── setup_heartbeat.py     ← One-command setup for any Hermes agent
 │   ├── journal_store.py       ← SQLite journal store (CRUD + export + migration)
 │   ├── journal_cli.py         ← CLI for journal read/add/close-thread/export-latest
-│   └── primary_guard.py       ← SHA-256 hash verification + file locking for PRIMARY.md
+│   ├── primary_guard.py       ← SHA-256 hash verification + file locking for PRIMARY.md
+│   ├── graph_builder.py       ← Standalone graph payload builder
+│   └── graph_server.py        ← Standalone graph HTTP server
 ├── templates/
 │   ├── GOALS.template.md      ← Parameterized mutable goals template
 │   ├── JOURNAL.template.md    ← Parameterized journal template (for migration reference)
@@ -254,7 +316,9 @@ agent-heartbeat/
 └── tests/
     ├── test_journal_store.py  ← SQLite journal store tests (query + export)
     ├── test_journal_cli.py    ← CLI end-to-end tests
-    └── test_primary_guard.py  ← Hash verification + file locking tests
+    ├── test_primary_guard.py  ← Hash verification + file locking tests
+    ├── test_graph_builder.py  ← Graph payload builder tests
+    └── test_graph_server.py   ← Graph HTTP endpoint tests
 ```
 
 ---

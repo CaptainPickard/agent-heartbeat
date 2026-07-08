@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory Graph — Agent Heartbeat</title>
+<style>
+  :root {
+    --bg: #1a1f28;
+    --surface: #323130;
+    --surface-translucent: rgba(50, 49, 48, 0.88);
+    --border: #383330;
+    --border2: #504945;
+    --border-subtle: rgba(255, 255, 255, 0.04);
+    --text: #d5c9a3;
+    --muted: #8a8278;
+    --accent: #f5b419;
+    --accent-hover: #f5b419dd;
+    --accent-bg: rgba(245, 180, 25, 0.08);
+    --strong: #fbf1c7;
+    --code-bg: #1d2021;
+    --code-inline-bg: rgba(235, 219, 178, 0.08);
+    --code-text: #fe8019;
+    --badge-bg: #504945;
+    --shadow: rgba(0, 0, 0, 0.5);
+    --color-skill: #f5b419;
+    --color-memory: #f5b419;
+    --color-honcho-conclusion: #fbbf24;
+    --color-honcho-peer: #c084fc;
+    --color-honcho-session: #22d3ee;
+    --color-journal: #10b981;
+    --color-wiki: #2dd4bf;
+    --color-document: #3b82f6;
+    --color-codebase: #a855f7;
+    --color-goals: #fbbf24;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  #topbar { position: fixed; top: 0; left: 0; right: 0; height: 44px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; z-index: 100; gap: 12px; }
+  #backBtn { background: none; border: 1px solid var(--border); color: var(--text); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px; text-decoration: none; }
+  #backBtn:hover { background: var(--accent-bg); border-color: var(--accent); }
+  #topbarTitle { font-size: 14px; font-weight: 600; color: var(--muted); }
+  #topbarSpacer { flex: 1; }
+  #refreshBtn { background: none; border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  #refreshBtn:hover { background: var(--accent-bg); border-color: var(--accent); }
+  #graphCanvasContainer { position: absolute; top: 44px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  #memoryGraphCanvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  #memoryGraphCanvas:active { cursor: grabbing; }
+  #graphStats { position: absolute; top: 8px; left: 8px; background: var(--surface-translucent); padding: 6px 12px; border-radius: 4px; font-size: 12px; color: var(--muted); z-index: 10; pointer-events: none; }
+  #graphLegend { position: absolute; bottom: 8px; left: 8px; background: var(--surface-translucent); padding: 8px 12px; border-radius: 4px; font-size: 11px; color: var(--muted); z-index: 10; pointer-events: none; line-height: 1.6; }
+  #graphLegend .legend-item { display: flex; align-items: center; gap: 6px; }
+  #graphLegend .legend-shape { width: 12px; height: 12px; display: inline-block; }
+  #graphHoverCard { position: absolute; background: var(--surface); color: var(--text); padding: 10px; border-radius: 6px; box-shadow: 0 4px 12px var(--shadow); max-width: 300px; font-size: 13px; z-index: 20; display: none; pointer-events: none; line-height: 1.5; border: 1px solid var(--border); }
+  #graphHoverCard b { display: block; margin-bottom: 4px; }
+  #graphHoverCard .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; background: var(--badge-bg); margin-bottom: 4px; }
+  #graphHoverCard .preview { color: var(--muted); font-size: 12px; margin-top: 4px; word-break: break-word; }
+  #graphHoverCard .conn { color: var(--muted); font-size: 11px; margin-top: 4px; opacity: 0.7; }
+  #graphError { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: var(--surface); padding: 20px; border-radius: 8px; text-align: center; z-index: 30; display: none; flex-direction: column; gap: 12px; border: 1px solid var(--border); }
+  #graphError button { background: var(--accent); border: none; color: var(--bg); padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  #graphError button:hover { background: var(--accent-hover); }
+  /* Detail Panel — right-docked sliding panel */
+  #graphDetailPanel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 380px;
+    max-width: 90vw;
+    background: var(--surface-translucent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-left: 1px solid var(--border);
+    box-shadow: -4px 0 24px var(--shadow);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    overflow: hidden;
+  }
+  #graphDetailPanel.open {
+    transform: translateX(0);
+  }
+  #graphDetailPanel .detail-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #graphDetailPanel .detail-title {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--strong);
+    line-height: 1.3;
+    word-break: break-word;
+    margin-top: 2px;
+  }
+  #graphDetailPanel .detail-close {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  #graphDetailPanel .detail-close:hover {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  #graphDetailPanel .detail-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  #graphDetailPanel .detail-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  #graphDetailPanel .detail-meta {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  #graphDetailPanel .detail-meta-row {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+  #graphDetailPanel .detail-meta-label {
+    color: var(--muted);
+    opacity: 0.7;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+    min-width: 70px;
+  }
+  #graphDetailPanel .detail-meta-value {
+    color: var(--text);
+    word-break: break-word;
+  }
+  #graphDetailPanel .detail-content {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+    word-break: break-word;
+    white-space: pre-wrap;
+    padding: 10px 12px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  #graphDetailPanel .detail-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  #graphDetailPanel .detail-tag {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--badge-bg);
+    color: var(--text);
+  }
+  #graphDetailPanel .detail-threads {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  #graphDetailPanel .detail-threads li {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    line-height: 1.5;
+  }
+  #graphDetailPanel .detail-threads li:last-child {
+    border-bottom: none;
+  }
+  #graphDetailPanel .detail-connections {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+  }
+  #graphDetailPanel .detail-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: none;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  #graphDetailPanel .detail-nav-btn:hover {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  #graphDetailPanel .detail-nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  @media (max-width: 600px) {
+    #graphDetailPanel {
+      width: 100vw;
+      max-width: 100vw;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <a href="https://github.com/CaptainPickard/agent-heartbeat" id="backBtn" target="_blank" rel="noopener noreferrer">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    View Repository
+  </a>
+  <div id="topbarTitle">Agent Memory Graph</div>
+  <div id="topbarSpacer"></div>
+  <button id="refreshBtn" onclick="loadMemoryGraph(true)">Refresh</button>
+</div>
+
+<div id="graphCanvasContainer">
+  <canvas id="memoryGraphCanvas"></canvas>
+  <div id="graphStats"></div>
+  <div id="graphLegend">
+    <div class="legend-item"><span class="legend-shape" style="background:var(--color-skill);border-radius:50%"></span> Skills (colored by category cluster)</div>
+    <div class="legend-item"><span class="legend-shape" style="background:var(--color-memory)"></span> Memories (colored by topic cluster)</div>
+    <div class="legend-item"><span class="legend-shape" style="background:var(--color-memory);transform:rotate(45deg)"></span> User / Soul (cluster-colored)</div>
+    <div class="legend-item"><span class="legend-shape" style="background:var(--color-honcho-conclusion);border-radius:50%"></span> Honcho Conclusions</div>
+    <div class="legend-item"><span class="legend-shape" style="background:var(--color-honcho-peer);transform:rotate(45deg)"></span> Honcho Peers</div>
+    <div class="legend-item"><span class="legend-shape" style="background:var(--color-honcho-session)"></span> Honcho Sessions</div>
+    <div class="legend-item"><span class="legend-shape" style="background:var(--color-wiki);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)"></span> Wiki Pages (hexagon, colored by type)</div>
+    <div class="legend-item"><span class="legend-shape" style="background:#3b82f6;border-radius:3px"></span> Documents (blue rounded square)</div>
+    <div class="legend-item"><span class="legend-shape" style="background:#a855f7;border:2px solid #fff"></span> Codebases (purple square)</div>
+    <div class="legend-item"><span class="legend-shape" style="background:#fbbf24;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)"></span> GOALS.md (star)</div>
+    <div style="margin-top:4px;color:var(--muted);opacity:0.7">Click halo: collapse/expand · Double-click label: zoom</div>
+  </div>
+  <div id="graphHoverCard"></div>
+  <div id="graphError"></div>
+  <div id="graphDetailPanel">
+    <div class="detail-header">
+      <div class="detail-title" id="detailTitle"></div>
+      <button class="detail-close" onclick="_closeDetailPanel()" aria-label="Close">×</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </div>
+</div>
+
+<script src="/vendor/d3/d3.v7.min.js"></script>
+<script>
+// Standalone page — adapt the graph code for this context
+// The original memory-graph.js uses switchPanel() for navigation which doesn't exist here.
+// On this standalone page, node clicks only open the local detail panel.
+
+// Memory Graph Visualization — canvas force-directed rendering engine (Card 3)
+let _graphData = null;
+let _simulation = null;
+let _rafId = null;
+let _canvas = null;
+let _ctx = null;
+let _zoomTransform = { k: 1, x: 0, y: 0 };
+let _nodeMap = new Map();
+let _clusterColorMap = new Map();
+let _clusterLabelMap = new Map();
+let _connectionCounts = {};
+let _zoomBehavior = null;
+let _isDragging = false;
+let _mouseDownPos = null;
+let _megaDragLast = null;
+let _collapsedClusters = new Set();
+let _eventsBound = false;
+
+function _screenToGraph(screenX, screenY) {
+    return {
+        x: (screenX - _zoomTransform.x) / _zoomTransform.k,
+        y: (screenY - _zoomTransform.y) / _zoomTransform.k
+    };
+}
+
+function _clusterGeometry() {
+    const result = [];
+    if (!_graphData || !_graphData.clusters) return result;
+    _graphData.clusters.forEach(cluster => {
+        const members = cluster.nodeIds.map(id => _nodeMap.get(id)).filter(n => n && n.x != null);
+        if (!members.length) return;
+        const cx = members.reduce((s, n) => s + n.x, 0) / members.length;
+        const cy = members.reduce((s, n) => s + n.y, 0) / members.length;
+        const maxDist = Math.max(...members.map(n => Math.hypot(n.x - cx, n.y - cy)));
+        result.push({ cluster, members, cx, cy, maxDist });
+    });
+    return result;
+}
+
+function _megaNodeRadius(memberCount) {
+    return Math.min(25 + 2 * memberCount, 60);
+}
+
+function _findNodeAt(graphX, graphY) {
+    if (!_graphData) return null;
+    for (const geo of _clusterGeometry()) {
+        if (!_collapsedClusters.has(geo.cluster.id)) continue;
+        const r = _megaNodeRadius(geo.members.length);
+        if (Math.hypot(geo.cx - graphX, geo.cy - graphY) <= r) {
+            return {
+                _isMega: true,
+                id: 'cluster:' + geo.cluster.id,
+                clusterId: geo.cluster.id,
+                x: geo.cx,
+                y: geo.cy,
+                _radius: r,
+                _members: geo.members,
+                label: geo.cluster.label,
+                type: 'cluster'
+            };
+        }
+    }
+    for (let i = _graphData.nodes.length - 1; i >= 0; i--) {
+        const n = _graphData.nodes[i];
+        if (_collapsedClusters.has(n.clusterId)) continue;
+        const r = n._radius || 5;
+        if (Math.hypot(n.x - graphX, n.y - graphY) <= r) return n;
+    }
+    return null;
+}
+
+function _findLabelAt(graphX, graphY) {
+    if (!_ctx) return null;
+    _ctx.font = '12px sans-serif';
+    for (const geo of _clusterGeometry()) {
+        if (_collapsedClusters.has(geo.cluster.id)) continue;
+        const text = geo.cluster.label + ' · ' + geo.cluster.nodeIds.length;
+        const textWidth = _ctx.measureText(text).width;
+        const left = geo.cx - textWidth / 2 - 6;
+        const right = geo.cx + textWidth / 2 + 6;
+        const top = geo.cy - 14;
+        const bottom = geo.cy + 4;
+        if (graphX >= left && graphX <= right && graphY >= top && graphY <= bottom) return geo;
+    }
+    return null;
+}
+
+function _findHaloAt(graphX, graphY) {
+    for (const geo of _clusterGeometry()) {
+        if (_collapsedClusters.has(geo.cluster.id)) continue;
+        if (Math.hypot(geo.cx - graphX, geo.cy - graphY) <= geo.maxDist + 20) return geo;
+    }
+    return null;
+}
+
+function _toggleClusterCollapse(clusterId) {
+    if (_collapsedClusters.has(clusterId)) {
+        _collapsedClusters.delete(clusterId);
+        if (_simulation) _simulation.alpha(0.3).restart();
+    } else {
+        _collapsedClusters.add(clusterId);
+    }
+    _render();
+}
+
+function forceClusterGravity(strength) {
+    let nodes;
+    function force(alpha) {
+        const centroids = new Map();
+        nodes.forEach(n => {
+            const c = n.clusterId;
+            if (!centroids.has(c)) centroids.set(c, { x: 0, y: 0, count: 0 });
+            const cen = centroids.get(c);
+            cen.x += n.x; cen.y += n.y; cen.count++;
+        });
+        centroids.forEach(cen => { cen.x /= cen.count; cen.y /= cen.count; });
+        nodes.forEach(n => {
+            const cen = centroids.get(n.clusterId);
+            if (cen) {
+                n.vx += (cen.x - n.x) * alpha * strength;
+                n.vy += (cen.y - n.y) * alpha * strength;
+            }
+        });
+    }
+    force.initialize = function (n) { nodes = n; };
+    return force;
+}
+
+function _t(key, fallback) { return fallback; }
+
+async function loadMemoryGraph(forceRefresh = false) {
+    const url = forceRefresh ? '/api/memory-graph?bust=1' : '/api/memory-graph';
+    try {
+        _closeDetailPanel();
+        const res = await fetch(url, { credentials: 'include' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        _graphData = await res.json();
+        _hideGraphError();
+        _collapsedClusters = new Set();
+        _initSimulation();
+        _startRenderLoop();
+        _renderStats();
+    } catch (e) {
+        _showGraphError(e.message);
+    }
+}
+
+function _showGraphError(msg) {
+    const el = document.getElementById('graphError');
+    if (!el) return;
+    el.innerHTML = '';
+    const text = document.createElement('div');
+    text.textContent = _t('graph_error_loading', 'Failed to load graph data') + (msg ? ': ' + msg : '');
+    const btn = document.createElement('button');
+    btn.textContent = _t('graph_error_retry', 'Retry');
+    btn.onclick = () => loadMemoryGraph(true);
+    el.appendChild(text);
+    el.appendChild(btn);
+    el.style.display = 'flex';
+}
+
+function _hideGraphError() {
+    const el = document.getElementById('graphError');
+    if (el) el.style.display = 'none';
+}
+
+function _resizeCanvas() {
+    if (!_canvas) return;
+    const container = document.getElementById('graphCanvasContainer');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    _canvas.width = rect.width;
+    _canvas.height = rect.height;
+}
+
+function _initSimulation() {
+    _canvas = document.getElementById('memoryGraphCanvas');
+    if (!_canvas) return;
+    _ctx = _canvas.getContext('2d');
+    _resizeCanvas();
+
+    _connectionCounts = {};
+    for (const edge of _graphData.edges) {
+        _connectionCounts[edge.source] = (_connectionCounts[edge.source] || 0) + 1;
+        _connectionCounts[edge.target] = (_connectionCounts[edge.target] || 0) + 1;
+    }
+    for (const node of _graphData.nodes) {
+        node._radius = Math.min(5 + 2 * (_connectionCounts[node.id] || 0), 20);
+    }
+
+    const clusterById = {};
+    for (const node of _graphData.nodes) clusterById[node.id] = node.clusterId;
+
+    _nodeMap = new Map();
+    _graphData.nodes.forEach(n => _nodeMap.set(n.id, n));
+
+    _clusterColorMap = new Map();
+    _clusterLabelMap = new Map();
+    (_graphData.clusters || []).forEach(c => {
+        _clusterColorMap.set(c.id, c.color);
+        _clusterLabelMap.set(c.id, c.label);
+    });
+
+    if (_simulation) _simulation.stop();
+
+    // Performance: adjust charge and alpha decay for large node counts
+    // Reduced charge strength for more compact layout
+    const nodeCount = _graphData.nodes.length;
+    const chargeStrength = nodeCount > 500 ? -60 : -30;
+    const alphaDecay = nodeCount > 500 ? 0.015 : 0.025;
+
+    _simulation = d3.forceSimulation(_graphData.nodes)
+        .force('charge', d3.forceManyBody().strength(chargeStrength))
+        .force('link', d3.forceLink(_graphData.edges).id(d => d.id).distance(35).strength(link => {
+            return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.5 : 0.15;
+        }))
+        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2))
+        .force('collide', d3.forceCollide().radius(d => (d._radius || 5) + 2))
+        .force('cluster', forceClusterGravity(0.15))
+        .alphaDecay(alphaDecay);
+
+    // All clusters expanded by default — no auto-collapse
+    _collapsedClusters = new Set();
+
+    _setupZoomAndDrag();
+}
+
+function _setupZoomAndDrag() {
+    if (!_canvas) return;
+
+    const zoom = d3.zoom()
+        .scaleExtent([0.1, 4])
+        .on('zoom', (event) => {
+            _zoomTransform = event.transform;
+            _render();
+        });
+    _zoomBehavior = zoom;
+
+    const drag = d3.drag()
+        .subject(function (event) {
+            const graphX = (event.x - _zoomTransform.x) / _zoomTransform.k;
+            const graphY = (event.y - _zoomTransform.y) / _zoomTransform.k;
+            return _findNodeAt(graphX, graphY);
+        })
+        .on('start', function (event) {
+            if (!event.active) _simulation.alphaTarget(0.3).restart();
+            _isDragging = true;
+            if (event.subject) {
+                if (event.subject._isMega) {
+                    _megaDragLast = { x: event.x, y: event.y };
+                    event.subject._members.forEach(m => { m.fx = m.x; m.fy = m.y; });
+                } else {
+                    event.subject.fx = event.x;
+                    event.subject.fy = event.y;
+                }
+            }
+        })
+        .on('drag', function (event) {
+            if (event.subject) {
+                if (event.subject._isMega) {
+                    const dx = event.x - _megaDragLast.x;
+                    const dy = event.y - _megaDragLast.y;
+                    event.subject._members.forEach(m => { m.fx += dx; m.fy += dy; });
+                    _megaDragLast = { x: event.x, y: event.y };
+                } else {
+                    event.subject.fx = event.x;
+                    event.subject.fy = event.y;
+                }
+            }
+        })
+        .on('end', function (event) {
+            if (!event.active) _simulation.alphaTarget(0);
+            _isDragging = false;
+            if (event.subject) {
+                if (event.subject._isMega) {
+                    event.subject._members.forEach(m => { m.fx = null; m.fy = null; });
+                } else {
+                    event.subject.fx = null;
+                    event.subject.fy = null;
+                }
+            }
+        });
+
+    d3.select(_canvas).call(zoom);
+    d3.select(_canvas).call(drag);
+
+    if (!_eventsBound) {
+        _canvas.addEventListener('mousedown', (event) => {
+            _mouseDownPos = { x: event.offsetX, y: event.offsetY };
+        });
+        _canvas.addEventListener('mousemove', _handleGraphMouseMove);
+        _canvas.addEventListener('mouseleave', _hideHoverCard);
+        _canvas.addEventListener('click', _handleGraphClick);
+        _canvas.addEventListener('dblclick', _handleGraphDblClick);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') _closeDetailPanel();
+        });
+        _eventsBound = true;
+    }
+}
+
+function _connectionCountFor(nodeId) {
+    return _connectionCounts[nodeId] || 0;
+}
+
+function _showHoverCard(node, mouseX, mouseY) {
+    const card = document.getElementById('graphHoverCard');
+    const container = document.getElementById('graphCanvasContainer');
+    if (!card || !container) return;
+
+    card.innerHTML = '';
+    const title = document.createElement('div');
+    title.style.fontWeight = 'bold';
+    title.textContent = node.label || '';
+    card.appendChild(title);
+
+    if (node._isMega) {
+        const members = document.createElement('div');
+        members.textContent = _t('graph_hover_members', 'Members') + ': ' + node._members.length;
+        card.appendChild(members);
+    } else if (node.type === 'honcho-conclusion') {
+        const badge = document.createElement('div');
+        badge.className = 'badge';
+        badge.style.background = '#4a3a1a';
+        badge.textContent = 'Honcho Conclusion';
+        card.appendChild(badge);
+        const meta = document.createElement('div');
+        meta.style.color = '#a0a0c0';
+        meta.style.fontSize = '12px';
+        meta.textContent = (node.workspace || '?') + ' · ' + (node.observer || '?') + ' → ' + (node.observed || '?');
+        card.appendChild(meta);
+        if (node.preview) {
+            const preview = document.createElement('div');
+            preview.className = 'preview';
+            preview.textContent = String(node.preview).slice(0, 200);
+            card.appendChild(preview);
+        }
+        if (node.created_at) {
+            const ts = document.createElement('div');
+            ts.style.color = '#606080';
+            ts.style.fontSize = '11px';
+            ts.textContent = node.created_at.slice(0, 19).replace('T', ' ');
+            card.appendChild(ts);
+        }
+        const conn = document.createElement('div');
+        conn.className = 'conn';
+        conn.textContent = _t('graph_hover_connections', 'Connections') + ': ' + _connectionCountFor(node.id);
+        card.appendChild(conn);
+    } else if (node.type === 'honcho-peer') {
+        const badge = document.createElement('div');
+        badge.className = 'badge';
+        badge.style.background = '#3a2a4a';
+        badge.textContent = 'Honcho Peer';
+        card.appendChild(badge);
+        const meta = document.createElement('div');
+        meta.style.color = '#a0a0c0';
+        meta.style.fontSize = '12px';
+        meta.textContent = 'Workspace: ' + (node.workspace || '?');
+        card.appendChild(meta);
+        if (node.preview) {
+            const preview = document.createElement('div');
+            preview.className = 'preview';
+            preview.textContent = String(node.preview).slice(0, 200);
+            card.appendChild(preview);
+        }
+        const conn = document.createElement('div');
+        conn.className = 'conn';
+        conn.textContent = _t('graph_hover_connections', 'Connections') + ': ' + _connectionCountFor(node.id);
+        card.appendChild(conn);
+    } else if (node.type === 'honcho-session') {
+        const badge = document.createElement('div');
+        badge.className = 'badge';
+        badge.style.background = '#1a3a4a';
+        badge.textContent = 'Honcho Session';
+        card.appendChild(badge);
+        const meta = document.createElement('div');
+        meta.style.color = '#a0a0c0';
+        meta.style.fontSize = '12px';
+        meta.textContent = 'Workspace: ' + (node.workspace || '?') + ' · Active: ' + (node.is_active ? 'Yes' : 'No');
+        card.appendChild(meta);
+        const conn = document.createElement('div');
+        conn.className = 'conn';
+        conn.textContent = _t('graph_hover_connections', 'Connections') + ': ' + _connectionCountFor(node.id);
+        card.appendChild(conn);
+    } else if (node.type === 'wiki') {
+        const badge = document.createElement('div');
+        badge.className = 'badge';
+        const wikiTypeColors = { 'entity': '#1a4a4a', 'concept': '#4a2a3a', 'comparison': '#4a3a1a', 'query': '#3a2a4a' };
+        badge.style.background = wikiTypeColors[node.wiki_type] || '#1a4a4a';
+        badge.textContent = 'Wiki: ' + (node.wiki_type || 'page');
+        card.appendChild(badge);
+        if (node.tags && node.tags.length) {
+            const tags = document.createElement('div');
+            tags.style.color = '#8a8278';
+            tags.style.fontSize = '11px';
+            tags.textContent = 'Tags: ' + node.tags.join(', ');
+            card.appendChild(tags);
+        }
+        if (node.preview) {
+            const preview = document.createElement('div');
+            preview.className = 'preview';
+            preview.textContent = String(node.preview).slice(0, 200);
+            card.appendChild(preview);
+        }
+        const conn = document.createElement('div');
+        conn.className = 'conn';
+        conn.textContent = _t('graph_hover_connections', 'Connections') + ': ' + _connectionCountFor(node.id);
+        card.appendChild(conn);
+    } else if (node.type === 'journal-entry') {
+        const badge = document.createElement('div');
+        badge.className = 'badge';
+        badge.style.background = '#1a4a2a';
+        badge.textContent = 'Journal Entry';
+        card.appendChild(badge);
+
+        const meta = document.createElement('div');
+        meta.style.color = '#a0a0c0';
+        meta.style.fontSize = '12px';
+        meta.textContent = '[' + (node.session_type || 'Daytime') + '] ' + (node.date || '');
+        card.appendChild(meta);
+
+        if (node.preview) {
+            const preview = document.createElement('div');
+            preview.className = 'preview';
+            preview.textContent = String(node.preview).slice(0, 200);
+            card.appendChild(preview);
+        }
+
+        if (node.open_threads && node.open_threads.length) {
+            const threadsLabel = document.createElement('div');
+            threadsLabel.style.color = '#8a8278';
+            threadsLabel.style.fontSize = '11px';
+            threadsLabel.textContent = 'Open threads:';
+            card.appendChild(threadsLabel);
+
+            const threadsList = document.createElement('ul');
+            threadsList.style.margin = '4px 0 0 18px';
+            threadsList.style.padding = '0';
+            threadsList.style.color = '#8a8278';
+            threadsList.style.fontSize = '11px';
+            for (const thread of node.open_threads) {
+                const item = document.createElement('li');
+                item.textContent = thread;
+                threadsList.appendChild(item);
+            }
+            card.appendChild(threadsList);
+        }
+
+        const conn = document.createElement('div');
+        conn.className = 'conn';
+        conn.textContent = _t('graph_hover_connections', 'Connections') + ': ' + _connectionCountFor(node.id);
+        card.appendChild(conn);
+    } else {
+        const badge = document.createElement('div');
+        badge.textContent = node.type || '';
+        card.appendChild(badge);
+
+        const clusterEl = document.createElement('div');
+        clusterEl.textContent = _clusterLabelMap.get(node.clusterId) || '';
+        card.appendChild(clusterEl);
+
+        if (node.preview) {
+            const preview = document.createElement('div');
+            preview.textContent = String(node.preview).slice(0, 200);
+            card.appendChild(preview);
+        }
+
+        const conn = document.createElement('div');
+        conn.textContent = _t('graph_hover_connections', 'Connections') + ': ' + _connectionCountFor(node.id);
+        card.appendChild(conn);
+    }
+
+    card.style.display = 'block';
+    const containerRect = container.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    let left = mouseX + 15;
+    let top = mouseY + 15;
+    if (left + cardRect.width > containerRect.width) left = mouseX - cardRect.width - 15;
+    if (top + cardRect.height > containerRect.height) top = mouseY - cardRect.height - 15;
+    if (left < 0) left = 4;
+    if (top < 0) top = 4;
+    card.style.left = left + 'px';
+    card.style.top = top + 'px';
+}
+
+function _hideHoverCard() {
+    const card = document.getElementById('graphHoverCard');
+    if (card) card.style.display = 'none';
+}
+
+function _closeDetailPanel() {
+    const panel = document.getElementById('graphDetailPanel');
+    if (panel) panel.classList.remove('open');
+}
+
+function _badgeColorForType(type) {
+    const colors = {
+        skill: 'var(--color-skill)',
+        memory: 'var(--color-memory)',
+        user: 'var(--accent)',
+        soul: 'var(--accent)',
+        'honcho-conclusion': 'var(--color-honcho-conclusion)',
+        'honcho-peer': 'var(--color-honcho-peer)',
+        'honcho-session': 'var(--color-honcho-session)',
+        'journal-entry': 'var(--color-journal)',
+        wiki: 'var(--color-wiki)',
+        document: 'var(--color-document, #3b82f6)',
+        codebase: 'var(--color-codebase, #a855f7)',
+        goals: 'var(--color-goals, #fbbf24)',
+        cluster: 'var(--accent)'
+    };
+    return colors[type] || 'var(--badge-bg)';
+}
+
+function _badgeLabelForType(type, node) {
+    const labels = {
+        skill: 'Skill',
+        memory: 'Memory',
+        user: 'User Profile',
+        soul: 'Soul',
+        'honcho-conclusion': 'Honcho Conclusion',
+        'honcho-peer': 'Honcho Peer',
+        'honcho-session': 'Honcho Session',
+        'journal-entry': 'Journal Entry',
+        wiki: 'Wiki: ' + (node.wiki_type || 'page'),
+        document: 'Document',
+        codebase: 'Codebase: ' + (node.label || ''),
+        goals: 'Goals',
+        cluster: 'Cluster'
+    };
+    return labels[type] || type || 'Unknown';
+}
+
+function _canNavigate(node) {
+    return false;
+}
+
+function _isMegaNode(node) {
+    return node && node._isMega;
+}
+
+function _appendMetaRow(parent, label, value) {
+    const row = document.createElement('div');
+    row.className = 'detail-meta detail-meta-row';
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'detail-meta-label';
+    labelEl.textContent = label;
+
+    const valueEl = document.createElement('span');
+    valueEl.className = 'detail-meta-value';
+    valueEl.textContent = value;
+
+    row.appendChild(labelEl);
+    row.appendChild(valueEl);
+    parent.appendChild(row);
+}
+
+function _renderDetailContent(node) {
+    const body = document.getElementById('detailBody');
+    if (!body) return;
+    body.innerHTML = '';
+
+    const badge = document.createElement('div');
+    badge.className = 'detail-badge';
+    badge.style.background = _badgeColorForType(node.type);
+    badge.style.color = 'var(--bg)';
+    badge.textContent = _badgeLabelForType(node.type, node);
+    body.appendChild(badge);
+
+    if (node.type !== 'cluster' && !_isMegaNode(node)) {
+        const clusterLabel = _clusterLabelMap && _clusterLabelMap.get(node.clusterId);
+        if (clusterLabel) _appendMetaRow(body, 'Cluster', clusterLabel);
+    }
+
+    if (node._isMega) {
+        _appendMetaRow(body, 'Members', node._members.length + ' nodes');
+    } else if (node.type === 'honcho-conclusion') {
+        _appendMetaRow(body, 'Workspace', node.workspace || '?');
+        _appendMetaRow(body, 'Observer', node.observer || '?');
+        _appendMetaRow(body, 'Observed', node.observed || '?');
+        if (node.created_at) _appendMetaRow(body, 'Created', node.created_at.slice(0, 19).replace('T', ' '));
+    } else if (node.type === 'honcho-peer') {
+        _appendMetaRow(body, 'Workspace', node.workspace || '?');
+    } else if (node.type === 'honcho-session') {
+        _appendMetaRow(body, 'Workspace', node.workspace || '?');
+        _appendMetaRow(body, 'Active', node.is_active ? 'Yes' : 'No');
+    } else if (node.type === 'journal-entry') {
+        _appendMetaRow(body, 'Session', '[' + (node.session_type || 'Daytime') + ']');
+        _appendMetaRow(body, 'Date', node.date || '?');
+    } else if (node.type === 'wiki') {
+        _appendMetaRow(body, 'Type', node.wiki_type || 'page');
+    } else if (node.type === 'document') {
+        if (node.category) _appendMetaRow(body, 'Category', node.category);
+    } else if (node.type === 'codebase') {
+        if (node.metrics) {
+            if (node.metrics.total_code_lines) _appendMetaRow(body, 'Code Lines', node.metrics.total_code_lines.toLocaleString());
+            if (node.metrics.file_count) _appendMetaRow(body, 'Files', String(node.metrics.file_count));
+            if (node.metrics.top_languages && node.metrics.top_languages.length) _appendMetaRow(body, 'Languages', node.metrics.top_languages.join(', '));
+        }
+        if (node.path) _appendMetaRow(body, 'Path', node.path);
+    } else if (node.type === 'goals') {
+        _appendMetaRow(body, 'File', 'GOALS.md');
+    } else if (node.type === 'skill') {
+        if (node.category) _appendMetaRow(body, 'Category', node.category);
+        if (node.disabled) _appendMetaRow(body, 'Status', 'Disabled');
+    }
+
+    if (node.tags && node.tags.length) {
+        const tagsWrap = document.createElement('div');
+        tagsWrap.className = 'detail-tags';
+        for (const tag of node.tags) {
+            const tagEl = document.createElement('span');
+            tagEl.className = 'detail-tag';
+            tagEl.textContent = tag;
+            tagsWrap.appendChild(tagEl);
+        }
+        body.appendChild(tagsWrap);
+    }
+
+    if (node.preview) {
+        const content = document.createElement('div');
+        content.className = 'detail-content';
+        content.textContent = node.preview;
+        body.appendChild(content);
+    }
+
+    if (node.open_threads && node.open_threads.length) {
+        const threadsLabel = document.createElement('div');
+        threadsLabel.className = 'detail-meta';
+        threadsLabel.style.fontWeight = '600';
+        threadsLabel.style.color = 'var(--strong)';
+        threadsLabel.textContent = 'Open Threads';
+        body.appendChild(threadsLabel);
+
+        const threadsList = document.createElement('ul');
+        threadsList.className = 'detail-threads';
+        for (const thread of node.open_threads) {
+            const item = document.createElement('li');
+            item.textContent = thread;
+            threadsList.appendChild(item);
+        }
+        body.appendChild(threadsList);
+    }
+
+    const conn = document.createElement('div');
+    conn.className = 'detail-connections';
+    conn.textContent = 'Connections: ' + _connectionCountFor(node.id);
+    body.appendChild(conn);
+
+    if (_canNavigate(node)) {
+        const navBtn = document.createElement('button');
+        navBtn.className = 'detail-nav-btn';
+        navBtn.innerHTML = '↗ Open in WebUI';
+        navBtn.onclick = function () { _navigateToNode(node); };
+        body.appendChild(navBtn);
+    }
+}
+
+function _showDetailPanel(node) {
+    const panel = document.getElementById('graphDetailPanel');
+    const titleEl = document.getElementById('detailTitle');
+    if (!panel || !titleEl) return;
+
+    titleEl.textContent = node.label || '';
+    _renderDetailContent(node);
+    panel.classList.add('open');
+    _hideHoverCard();
+}
+
+function _handleGraphMouseMove(event) {
+    if (_isDragging || !_graphData) {
+        _hideHoverCard();
+        return;
+    }
+    const pos = _screenToGraph(event.offsetX, event.offsetY);
+    const node = _findNodeAt(pos.x, pos.y);
+    if (!node) {
+        _hideHoverCard();
+        return;
+    }
+    _showHoverCard(node, event.offsetX, event.offsetY);
+}
+
+function _navigateToNode(node) {
+    _closeDetailPanel();
+}
+
+function _handleGraphClick(event) {
+    if (!_graphData) return;
+    if (_mouseDownPos) {
+        const dx = event.offsetX - _mouseDownPos.x;
+        const dy = event.offsetY - _mouseDownPos.y;
+        _mouseDownPos = null;
+        if (Math.hypot(dx, dy) > 3) return;
+    }
+    const pos = _screenToGraph(event.offsetX, event.offsetY);
+    const node = _findNodeAt(pos.x, pos.y);
+    if (node) {
+        if (node._isMega) {
+            _toggleClusterCollapse(node.clusterId);
+        } else {
+            _showDetailPanel(node);
+        }
+        return;
+    }
+    _closeDetailPanel();
+    if (_findLabelAt(pos.x, pos.y)) return;
+    const halo = _findHaloAt(pos.x, pos.y);
+    if (halo) _toggleClusterCollapse(halo.cluster.id);
+}
+
+function _handleGraphDblClick(event) {
+    if (!_graphData || !_zoomBehavior) return;
+    const pos = _screenToGraph(event.offsetX, event.offsetY);
+    const geo = _findLabelAt(pos.x, pos.y);
+    if (!geo) return;
+    event.preventDefault();
+
+    const minX = Math.min(...geo.members.map(n => n.x - (n._radius || 5)));
+    const maxX = Math.max(...geo.members.map(n => n.x + (n._radius || 5)));
+    const minY = Math.min(...geo.members.map(n => n.y - (n._radius || 5)));
+    const maxY = Math.max(...geo.members.map(n => n.y + (n._radius || 5)));
+
+    const padding = 50;
+    const scale = Math.min(
+        _canvas.width / (maxX - minX + padding * 2),
+        _canvas.height / (maxY - minY + padding * 2),
+        4
+    );
+    const tx = _canvas.width / 2 - (minX + maxX) / 2 * scale;
+    const ty = _canvas.height / 2 - (minY + maxY) / 2 * scale;
+    const transform = d3.zoomIdentity.translate(tx, ty).scale(scale);
+    d3.select(_canvas).transition().duration(300).call(_zoomBehavior.transform, transform);
+}
+
+function _hexToRgb(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+    if (!m) return { r: 255, g: 255, b: 255 };
+    return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+}
+
+function _blendEdgeColor(sourceClusterId, targetClusterId, alpha) {
+    const sourceColor = _clusterColorMap.get(sourceClusterId);
+    const targetColor = _clusterColorMap.get(targetClusterId);
+    if (!sourceColor || !targetColor) return 'rgba(255,255,255,' + alpha + ')';
+    const a = _hexToRgb(sourceColor);
+    const b = _hexToRgb(targetColor);
+    const r = Math.round((a.r + b.r) / 2);
+    const g = Math.round((a.g + b.g) / 2);
+    const bl = Math.round((a.b + b.b) / 2);
+    return 'rgba(' + r + ',' + g + ',' + bl + ',' + alpha + ')';
+}
+
+function _render() {
+    if (!_ctx || !_canvas || !_graphData) return;
+
+    _ctx.save();
+    _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+    _ctx.restore();
+
+    _ctx.save();
+    _ctx.translate(_zoomTransform.x, _zoomTransform.y);
+    _ctx.scale(_zoomTransform.k, _zoomTransform.k);
+
+    let maxWeight = 1;
+    for (const edge of _graphData.edges) {
+        if (edge.weight > maxWeight) maxWeight = edge.weight;
+    }
+
+    const clusterGeoList = _clusterGeometry();
+    const clusterGeoMap = new Map(clusterGeoList.map(geo => [geo.cluster.id, geo]));
+
+    function _visualPosFor(node) {
+        if (_collapsedClusters.has(node.clusterId)) {
+            const geo = clusterGeoMap.get(node.clusterId);
+            if (geo) return { x: geo.cx, y: geo.cy };
+        }
+        return { x: node.x, y: node.y };
+    }
+
+    const drawnAggregated = new Set();
+    for (const edge of _graphData.edges) {
+        const source = typeof edge.source === 'object' ? edge.source : null;
+        const target = typeof edge.target === 'object' ? edge.target : null;
+        if (!source || !target || source.x == null || target.x == null) continue;
+        const sourceCollapsed = _collapsedClusters.has(source.clusterId);
+        const targetCollapsed = _collapsedClusters.has(target.clusterId);
+        if (sourceCollapsed && targetCollapsed && source.clusterId === target.clusterId) continue;
+        if (sourceCollapsed || targetCollapsed) {
+            const aggKey = [
+                sourceCollapsed ? 'c:' + source.clusterId : source.id,
+                targetCollapsed ? 'c:' + target.clusterId : target.id
+            ].sort().join('|');
+            if (drawnAggregated.has(aggKey)) continue;
+            drawnAggregated.add(aggKey);
+        }
+        const sourcePos = _visualPosFor(source);
+        const targetPos = _visualPosFor(target);
+        _ctx.beginPath();
+        _ctx.moveTo(sourcePos.x, sourcePos.y);
+        _ctx.lineTo(targetPos.x, targetPos.y);
+        const isCrossLayer = edge.type === 'honcho:references_skill' || edge.type === 'honcho:references_memory' || edge.type === 'wiki_references_skill';
+        const isHonchoObs = edge.type === 'honcho:observes' || edge.type === 'honcho:observed_by';
+        const isWikiLink = edge.type === 'wiki_link';
+        const isJournalChain = edge.type === 'journal:chain';
+        const isJournalReference = edge.type === 'journal:references';
+        const alpha = 0.1 + 0.3 * (edge.weight / maxWeight);
+        if (isJournalChain) {
+            _ctx.strokeStyle = 'rgba(16,185,129,0.6)';
+            _ctx.setLineDash([]);
+            _ctx.lineWidth = 2;
+        } else if (isJournalReference) {
+            _ctx.strokeStyle = 'rgba(16,185,129,0.3)';
+            _ctx.setLineDash([3, 3]);
+            _ctx.lineWidth = 1;
+        } else if (isCrossLayer && edge.type === 'wiki_references_skill') {
+            _ctx.strokeStyle = 'rgba(45,212,191,' + (alpha * 0.7) + ')';
+            _ctx.setLineDash([3, 3]);
+            _ctx.lineWidth = 1;
+        } else if (isCrossLayer) {
+            _ctx.strokeStyle = 'rgba(96,165,250,' + (alpha * 0.7) + ')';
+            _ctx.setLineDash([3, 3]);
+            _ctx.lineWidth = 1;
+        } else if (isHonchoObs) {
+            _ctx.strokeStyle = _blendEdgeColor(source.clusterId, target.clusterId, alpha * 0.8);
+            _ctx.setLineDash([]);
+            _ctx.lineWidth = edge.weight >= 2 ? 1.5 : 1;
+        } else if (isWikiLink) {
+            _ctx.strokeStyle = _blendEdgeColor(source.clusterId, target.clusterId, alpha * 0.9);
+            _ctx.setLineDash([]);
+            _ctx.lineWidth = edge.weight >= 2 ? 1.5 : 1;
+        } else {
+            _ctx.strokeStyle = _blendEdgeColor(source.clusterId, target.clusterId, alpha);
+            _ctx.setLineDash([]);
+            _ctx.lineWidth = edge.weight >= 3 ? 2 : 1;
+        }
+        _ctx.stroke();
+    }
+    _ctx.setLineDash([]);
+
+    clusterGeoList.forEach(geo => {
+        if (_collapsedClusters.has(geo.cluster.id)) {
+            const r = _megaNodeRadius(geo.members.length);
+            _ctx.beginPath();
+            _ctx.arc(geo.cx, geo.cy, r, 0, 2 * Math.PI);
+            _ctx.fillStyle = geo.cluster.color;
+            _ctx.fill();
+            _ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            _ctx.lineWidth = 2;
+            _ctx.stroke();
+            _ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            _ctx.font = '12px sans-serif';
+            _ctx.textAlign = 'center';
+            _ctx.fillText(geo.cluster.label + ' · ' + geo.members.length, geo.cx, geo.cy + 4);
+            return;
+        }
+        _ctx.fillStyle = geo.cluster.color + '0D';
+        _ctx.beginPath();
+        _ctx.arc(geo.cx, geo.cy, geo.maxDist + 20, 0, 2 * Math.PI);
+        _ctx.fill();
+    });
+
+    for (const node of _graphData.nodes) {
+        if (node.x == null || node.y == null) continue;
+        if (_collapsedClusters.has(node.clusterId)) continue;
+        const r = node._radius || 5;
+
+        let nodeColor = _clusterColorMap.get(node.clusterId) || '#888888';
+        if (node.type === 'honcho-conclusion') nodeColor = '#fbbf24';
+        else if (node.type === 'honcho-peer') nodeColor = '#c084fc';
+        else if (node.type === 'honcho-session') nodeColor = '#22d3ee';
+        else if (node.type === 'journal-entry') nodeColor = node.session_type === 'Nightly' ? '#6366f1' : '#10b981';
+        else if (node.type === 'wiki') {
+            const wikiColors = { 'entity': '#2dd4bf', 'concept': '#f472b6', 'comparison': '#fbbf24', 'query': '#a78bfa' };
+            nodeColor = wikiColors[node.wiki_type] || '#2dd4bf';
+        }
+        else if (node.type === 'document') nodeColor = '#3b82f6';
+        else if (node.type === 'codebase') nodeColor = '#a855f7';
+        else if (node.type === 'goals') nodeColor = '#fbbf24';
+
+        _ctx.beginPath();
+        if (node.type === 'skill') {
+            _ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+        } else if (node.type === 'memory') {
+            const side = r * 2;
+            _ctx.rect(node.x - side / 2, node.y - side / 2, side, side);
+        } else if (node.type === 'honcho-conclusion') {
+            _ctx.arc(node.x, node.y, Math.min(r, 6), 0, 2 * Math.PI);
+        } else if (node.type === 'honcho-peer') {
+            const size = Math.max(r, 12);
+            _ctx.moveTo(node.x, node.y - size);
+            _ctx.lineTo(node.x + size, node.y);
+            _ctx.lineTo(node.x, node.y + size);
+            _ctx.lineTo(node.x - size, node.y);
+            _ctx.closePath();
+        } else if (node.type === 'honcho-session') {
+            const side = Math.min(r * 2, 10);
+            _ctx.rect(node.x - side / 2, node.y - side / 2, side, side);
+        } else if (node.type === 'journal-entry') {
+            const size = 7;
+            _ctx.moveTo(node.x, node.y - size);
+            _ctx.lineTo(node.x + size, node.y + size * 0.85);
+            _ctx.lineTo(node.x - size, node.y + size * 0.85);
+            _ctx.closePath();
+        } else if (node.type === 'wiki') {
+            const size = Math.max(r, 8);
+            const sides = 6;
+            for (let i = 0; i < sides; i++) {
+                const angle = (i / sides) * 2 * Math.PI - Math.PI / 2;
+                const px = node.x + Math.cos(angle) * size;
+                const py = node.y + Math.sin(angle) * size;
+                if (i === 0) _ctx.moveTo(px, py);
+                else _ctx.lineTo(px, py);
+            }
+            _ctx.closePath();
+        } else if (node.type === 'document') {
+            const size = Math.max(r, 8);
+            const radius = 3;
+            _ctx.roundRect(node.x - size, node.y - size, size * 2, size * 2, radius);
+        } else if (node.type === 'codebase') {
+            const size = Math.max(r, 12);
+            _ctx.rect(node.x - size, node.y - size, size * 2, size * 2);
+            _ctx.lineWidth = 2;
+        } else if (node.type === 'goals') {
+            const size = Math.max(r, 10);
+            for (let i = 0; i < 10; i++) {
+                const angle = (-Math.PI / 2) + (i * Math.PI / 5);
+                const radius = i % 2 === 0 ? size : size * 0.45;
+                const px = node.x + Math.cos(angle) * radius;
+                const py = node.y + Math.sin(angle) * radius;
+                if (i === 0) _ctx.moveTo(px, py);
+                else _ctx.lineTo(px, py);
+            }
+            _ctx.closePath();
+        } else {
+            const size = r * 2;
+            _ctx.moveTo(node.x, node.y - size / 2);
+            _ctx.lineTo(node.x + size / 2, node.y);
+            _ctx.lineTo(node.x, node.y + size / 2);
+            _ctx.lineTo(node.x - size / 2, node.y);
+            _ctx.closePath();
+        }
+        _ctx.fillStyle = nodeColor;
+        _ctx.fill();
+        _ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        if (node.type !== 'codebase') _ctx.lineWidth = 1;
+        _ctx.stroke();
+
+        if (_zoomTransform.k > 0.5 && node.type !== 'honcho-conclusion') {
+            _ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            _ctx.font = '10px sans-serif';
+            _ctx.textAlign = 'center';
+            _ctx.fillText(node.label || '', node.x, node.y + r + 12);
+        }
+    }
+
+    if (_graphData.clusters && _zoomTransform.k > 0.3) {
+        _graphData.clusters.forEach(cluster => {
+            const members = cluster.nodeIds.map(id => _nodeMap.get(id)).filter(n => n && n.x != null);
+            if (!members.length) return;
+            const cx = members.reduce((s, n) => s + n.x, 0) / members.length;
+            const cy = members.reduce((s, n) => s + n.y, 0) / members.length;
+            const text = cluster.label + ' · ' + cluster.nodeIds.length;
+            _ctx.font = '12px sans-serif';
+            _ctx.textAlign = 'center';
+            const textWidth = _ctx.measureText(text).width;
+            _ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            _ctx.fillRect(cx - textWidth / 2 - 6, cy - 14, textWidth + 12, 18);
+            _ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            _ctx.fillText(text, cx, cy - 1);
+        });
+    }
+
+    _ctx.restore();
+}
+
+function _startRenderLoop() {
+    if (_rafId) cancelAnimationFrame(_rafId);
+    _simulation.on('tick', _render);
+    _render();
+}
+
+function _stopMemoryGraph() {
+    if (_rafId) {
+        cancelAnimationFrame(_rafId);
+        _rafId = null;
+    }
+    if (_simulation) {
+        _simulation.stop();
+        _simulation.on('tick', null);
+    }
+}
+
+function _renderStats() {
+    const el = document.getElementById('graphStats');
+    if (!el || !_graphData || !_graphData.stats) return;
+    const stats = _graphData.stats;
+    let text = _t('graph_stats_skills', 'Skills') + ': ' + stats.skillCount + ' | ' +
+        _t('graph_stats_memories', 'Memories') + ': ' + stats.memoryCount;
+    if (stats.journalEntryCount > 0) {
+        text += ' | Journal: ' + stats.journalEntryCount + ' entries';
+    }
+    if (stats.honchoConclusionCount > 0) {
+        text += ' | Honcho: ' + stats.honchoConclusionCount + ' conclusions, ' +
+            stats.honchoPeerCount + ' peers';
+    }
+    if (stats.wikiCount > 0) {
+        text += ' | Wiki: ' + stats.wikiCount + ' pages';
+    }
+    if (stats.documentCount > 0) {
+        text += ' | Docs: ' + stats.documentCount;
+    }
+    if (stats.codebaseCount > 0) {
+        text += ' | Codebases: ' + stats.codebaseCount;
+    }
+    if (stats.goalCount > 0) {
+        text += ' | Goals: ' + stats.goalCount;
+    }
+    text += ' | ' + _t('graph_stats_edges', 'Edges') + ': ' + stats.edgeCount + ' | ' +
+        _t('graph_stats_clusters', 'Clusters') + ': ' + stats.clusterCount;
+    el.textContent = text;
+}
+
+window.addEventListener('resize', () => {
+    if (_canvas) {
+        _resizeCanvas();
+        _render();
+    }
+});
+
+
+// Init on load
+window.addEventListener('load', () => {
+    loadMemoryGraph();
+});
+window.addEventListener('resize', () => {
+    if (_canvas) { _resizeCanvas(); _render(); }
+});
+</script>
+</body>
+</html>
