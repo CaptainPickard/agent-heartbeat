@@ -132,7 +132,7 @@ def test_unlock_file_restores_writability(tmp_path):
 
 
 def test_setup_primary_creates_primary_and_hash_with_correct_content(tmp_path):
-    primary_guard.setup_primary(str(tmp_path), human_name="Nicko", agent_name="IO")
+    primary_guard.setup_primary(str(tmp_path), human_name="Human", agent_name="Agent")
 
     primary_path = tmp_path / "PRIMARY.md"
     hash_path = tmp_path / "PRIMARY.sha256"
@@ -141,8 +141,8 @@ def test_setup_primary_creates_primary_and_hash_with_correct_content(tmp_path):
     assert hash_path.exists()
 
     content = primary_path.read_text(encoding="utf-8")
-    assert "# IO — Primary Directives (Immutable)" in content
-    assert "set by Nicko" in content
+    assert "# Agent — Primary Directives (Immutable)" in content
+    assert "set by Human" in content
     assert f"*Hash: See {tmp_path}/PRIMARY.sha256*" in content
     assert "{AGENT_NAME}" not in content
     assert "{HUMAN_NAME}" not in content
@@ -150,14 +150,14 @@ def test_setup_primary_creates_primary_and_hash_with_correct_content(tmp_path):
 
 
 def test_setup_primary_sets_primary_read_only(tmp_path):
-    primary_guard.setup_primary(str(tmp_path), human_name="Nicko", agent_name="IO")
+    primary_guard.setup_primary(str(tmp_path), human_name="Human", agent_name="Agent")
 
     mode = stat.S_IMODE((tmp_path / "PRIMARY.md").stat().st_mode)
     assert mode == 0o444
 
 
 def test_check_primary_returns_valid_true_for_correct_setup(tmp_path):
-    primary_guard.setup_primary(str(tmp_path), human_name="Nicko", agent_name="IO")
+    primary_guard.setup_primary(str(tmp_path), human_name="Human", agent_name="Agent")
 
     result = primary_guard.check_primary(str(tmp_path))
 
@@ -167,7 +167,7 @@ def test_check_primary_returns_valid_true_for_correct_setup(tmp_path):
 
 
 def test_check_primary_returns_valid_false_after_tampering(tmp_path):
-    primary_guard.setup_primary(str(tmp_path), human_name="Nicko", agent_name="IO")
+    primary_guard.setup_primary(str(tmp_path), human_name="Human", agent_name="Agent")
 
     primary_path = tmp_path / "PRIMARY.md"
     primary_guard.unlock_file(str(primary_path))

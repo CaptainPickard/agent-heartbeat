@@ -5,7 +5,7 @@ description = "Standalone scripts and templates for running an agent heartbeat w
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-  { name = "IO", email = "io@nousresearch.com" }
+  { name = "Agent Heartbeat Contributors" }
 ]
 
 [project.optional-dependencies]

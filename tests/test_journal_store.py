@@ -266,9 +266,9 @@ def test_migrate_from_markdown_parses_existing_journal_entries(db_path, tmp_path
     source_md.write_text(
         "## Open Threads\n\n- thread a\n\n---\n\n## Entries\n\n"
         "### 2026-07-07 [Daytime] — Journal Created\n\n"
-        "**What I did:** Nicko and I set up the autonomous heartbeat system.\n\n"
+        "**What I did:** The human and I set up the autonomous heartbeat system.\n\n"
         "**What I found:** It works.\n\n"
-        "**What I'm thinking:** This is the most significant thing Nicko has ever asked.\n\n"
+        "**What I'm thinking:** This is the most significant thing the human has ever asked.\n\n"
         "**Open threads:**\n- First heartbeat decision — what do I pick?\n\n"
         "**Room status:** Clean.\n"
     )
@@ -283,7 +283,7 @@ def test_migrate_from_markdown_parses_existing_journal_entries(db_path, tmp_path
     created = next(entry for entry in entries if entry["title"] == "Journal Created")
     assert created["date"] == "2026-07-07"
     assert created["session_type"] == "Daytime"
-    assert "Nicko and I set up the autonomous heartbeat system" in created["what_i_did"]
+    assert "The human and I set up the autonomous heartbeat system" in created["what_i_did"]
     assert "most significant thing" in created["what_im_thinking"]
     assert any(
         "First heartbeat decision — what do I pick?" in thread

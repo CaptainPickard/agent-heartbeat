@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import os
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -20,8 +21,8 @@ from journal_store import (  # noqa: E402
     init_db,
 )
 
-DEFAULT_DB = "/workspace/journal.db"
-DEFAULT_MD = "/workspace/JOURNAL.md"
+DEFAULT_DB = os.path.join(os.getcwd(), "journal.db")
+DEFAULT_MD = os.path.join(os.getcwd(), "JOURNAL.md")
 
 
 def _parse_threads(raw: str | None) -> list[str]:

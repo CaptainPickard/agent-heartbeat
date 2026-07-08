@@ -22,8 +22,8 @@ support. To add it:
 
 ### 1. Copy the Honcho graph module
 
-Copy `build_honcho_graph_data()` and its helpers from the Hermes WebUI's
-`api/honcho_graph.py` into a new file `scripts/honcho_graph.py` in your
+Copy `build_honcho_graph_data()` and its helpers from your agent platform's
+Honcho integration code into a new file `scripts/honcho_graph.py` in your
 agent-heartbeat installation.
 
 ### 2. Create a custom graph server wrapper
@@ -79,7 +79,7 @@ cross-reference edge building automatically.
 
 ### 5. Configuration
 
-Read `honcho.json` from your Hermes home directory to get the `baseUrl` and
+Read `honcho.json` from your agent platform's home directory to get the `baseUrl` and
 workspace name. Or pass them directly:
 
 ```python

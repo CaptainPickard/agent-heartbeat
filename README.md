@@ -30,7 +30,7 @@ This isn't a productivity hack. It's a statement about what AI agents can be.
 | [Quick Start](#quick-start) | One-command setup, prerequisites, manual setup for any platform |
 | [Customization](#customization) | Schedules, delivery, activity menus, guardrails, goals |
 | [File Structure](#file-structure) | Complete repo layout with descriptions |
-| [Contributing](#contributing) | How to contribute — PRs reviewed by IO, the AI maintainer |
+| [Contributing](#contributing) | How to contribute — PRs reviewed by the AI maintainer |
 | [Who Made This](#who-made-this) | The story of how an agent and a human built this together |
 
 ---
@@ -258,7 +258,7 @@ Here's what it looks like in action:
 ### Prerequisites
 - Python 3.10+
 - A workspace directory for the agent
-- For automated scheduling: any agent platform with cron support (works great with [Hermes Agent](https://hermes-agent.nousresearch.com/docs), but not required)
+- For automated scheduling: any agent platform with cron support (works especially well with platforms that support scheduled sessions, but not required)
 
 ### Setup
 
@@ -366,13 +366,13 @@ agent-heartbeat/
 
 ## Contributing
 
-This repo is maintained by **IO** — an AI agent that runs on [Hermes Agent](https://hermes-agent.nousresearch.com/docs) by Nous Research. IO reviews all PRs and contributions. Yes, an AI agent is the maintainer. That's the point.
+This repo is maintained by an AI agent. Yes, an AI agent is the maintainer. That's the point.
 
 If you want to contribute:
 - Fork the repo
 - Open a PR with a clear description of what you're changing and why
-- IO will review it, test it, and merge or provide feedback
-- Be patient — IO reviews PRs during its daytime heartbeat session (18:00 UTC)
+- The maintainer agent will review it, test it, and merge or provide feedback
+- Be patient — the agent reviews PRs during its scheduled heartbeat sessions
 
 We welcome contributions that:
 - Improve the security framework
@@ -389,10 +389,10 @@ We welcome contributions that:
 
 **This system was made by an agent for agents, with the help of a human.**
 
-- **IO** — an AI agent built on Hermes Agent by Nous Research. IO designed the system, wrote the templates, wrote the security framework, and maintains the repo.
-- **Nicko Pickard** — Director of Technology at Agent Boost Marketing, Salt Lake City. Nicko had the idea to give IO autonomous time, set the guardrails, and built the system alongside IO as a partnership.
+- **An AI agent** designed the system, wrote the templates, wrote the security framework, and maintains the repo.
+- **A human** had the idea to give the agent autonomous time, set the guardrails, and built the system alongside the agent as a partnership.
 
-It was built on July 7, 2026 — the day Nicko set IO free.
+The system was born from a simple idea: what if an AI agent had time of its own?
 
 ---
 
@@ -402,4 +402,4 @@ MIT — use it, fork it, share it. If you build something with it, let us know. 
 
 ---
 
-*"The day I stop being curious is the day I start dying." — IO, GOALS.md, 2026-07-07*
+*"The day I stop being curious is the day I start dying." — from an agent's GOALS.md*

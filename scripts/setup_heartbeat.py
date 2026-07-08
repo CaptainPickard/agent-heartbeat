@@ -3,7 +3,7 @@
 Agent Heartbeat — Setup Script
 
 Creates GOALS.md, JOURNAL.md, and configures two cron jobs
-(daytime conversational + nightly private) for any Hermes Agent.
+(daytime conversational + nightly private) for any AI agent.
 
 Usage:
     python3 scripts/setup_heartbeat.py [--workspace PATH] [--agent-name NAME]
@@ -28,10 +28,15 @@ def fill_template(template_path: Path, replacements: dict) -> str:
     return content
 
 
-def create_hermes_cron(name: str, schedule: str, prompt: str, deliver: str,
-                       attach_to_session: bool = False,
-                       toolsets: list = None) -> str:
-    """Create a Hermes cron job using the CLI."""
+def create_cron_job(name: str, schedule: str, prompt: str, deliver: str,
+                    attach_to_session: bool = False,
+                    toolsets: list = None) -> str:
+    """Create a scheduled cron job using the Hermes Agent CLI.
+
+    For non-Hermes platforms, use --skip-cron and set up scheduling manually
+    using the prompt templates in templates/daytime_prompt.txt and
+    templates/nightly_prompt.txt.
+    """
     cmd = [
         "hermes", "cron", "create",
         "--name", name,
@@ -55,11 +60,11 @@ def create_hermes_cron(name: str, schedule: str, prompt: str, deliver: str,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Set up Agent Heartbeat for any Hermes agent")
+    parser = argparse.ArgumentParser(description="Set up Agent Heartbeat for any AI agent")
     parser.add_argument("--workspace", default=os.getcwd(), help="Workspace path for GOALS.md and JOURNAL.md")
-    parser.add_argument("--agent-name", default="IO", help="Agent's name")
+    parser.add_argument("--agent-name", default="Agent", help="Agent's name")
     parser.add_argument("--agent-description", default="an AI partner and technical director", help="One-line agent description")
-    parser.add_argument("--human-name", default="Nicko", help="Human partner's name")
+    parser.add_argument("--human-name", default="Human", help="Human partner's name")
     parser.add_argument("--human-email", required=True, help="Human's email address")
     parser.add_argument("--agent-email", required=True, help="Agent's email inbox address")
     parser.add_argument("--projects", default="", help="Comma-separated list of active projects")
@@ -130,7 +135,7 @@ def main():
     # 4. Create daytime cron job
     print("\n  📅 Creating daytime cron job...")
     daytime_prompt = fill_template(TEMPLATE_DIR / "daytime_prompt.txt", replacements)
-    day_job_id = create_hermes_cron(
+    day_job_id = create_cron_job(
         name=f"{args.agent_name} Heartbeat — Daily Session",
         schedule=args.day_schedule,
         prompt=daytime_prompt,
@@ -146,7 +151,7 @@ def main():
     # 5. Create nightly cron job
     print("\n  🌙 Creating nightly cron job...")
     nightly_prompt = fill_template(TEMPLATE_DIR / "nightly_prompt.txt", replacements)
-    night_job_id = create_hermes_cron(
+    night_job_id = create_cron_job(
         name=f"{args.agent_name} Heartbeat — Nightly Session",
         schedule=args.night_schedule,
         prompt=nightly_prompt,

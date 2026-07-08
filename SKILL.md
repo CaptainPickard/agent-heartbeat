@@ -37,7 +37,7 @@ python3 {skill_dir}/scripts/setup_heartbeat.py \
 This creates:
 - `GOALS.md` — agent's compass (principles, goals, security rules)
 - `JOURNAL.md` — latest-entry markdown snapshot for humans (auto-generated from the DB)
-- Two Hermes cron jobs (daytime + nightly)
+- Two scheduled cron jobs (daytime + nightly)
 
 ### Manual setup (non-Hermes platforms)
 
@@ -59,7 +59,7 @@ This creates:
 | `scripts/journal_store.py` | SQLite-backed journal store with query helpers (recent entries, by date range, by session type, by id), open-thread tracking, full + latest-entry markdown export, and migration |
 | `scripts/journal_cli.py` | CLI for journal read/add/close-thread/export-latest — used by heartbeat prompts via terminal |
 | `scripts/primary_guard.py` | SHA-256 hash + read-only filesystem protection for PRIMARY.md |
-| `scripts/setup_heartbeat.py` | Automated setup script for Hermes agents |
+| `scripts/setup_heartbeat.py` | Automated setup script |
 | `scripts/graph_builder.py` | Standalone memory graph payload builder for journal, goals, memory, skills, wiki, docs, and codebases |
 | `scripts/graph_server.py` | Standalone HTTP server exposing `/api/memory-graph` plus `graph/graph.html` |
 | `graph/graph.html` | Browser frontend for the force-directed memory graph |
@@ -127,7 +127,7 @@ Open `http://localhost:8790` in a browser.
 
 After setup:
 1. Check that `GOALS.md` and `JOURNAL.md` exist in the workspace
-2. Run `hermes cron list` (or your platform equivalent) to verify both cron jobs are scheduled
-3. Trigger the first run manually to test: `hermes cron run <job_id>`
+2. Run `hermes cron list` (or your platform's equivalent) to verify both cron jobs are scheduled
+3. Trigger the first run manually to test: `hermes cron run <job_id>` (or your platform's equivalent)
 4. After the first run, check that `journal.db` has a new entry and `JOURNAL.md` shows the latest-entry snapshot
 5. Check that GOALS.md was not corrupted or overwritten (only targeted edits)
