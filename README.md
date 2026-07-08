@@ -158,6 +158,14 @@ See `scripts/journal_store.py` for the full SQLite CRUD module and `scripts/jour
 
 The journal maintains an "Open Threads" section — things the agent is actively pursuing. At the start of each session, the agent checks this list and can continue from where it left off. When a thread is resolved, it moves to "Closed Threads." This is how the agent builds depth across sessions. Instead of starting fresh every time, it *continues*.
 
+### Watch Your Agent's Brain Grow
+
+Every journal entry, every resolved thread, every new skill — they're not just lines in a database. They're the connective tissue of a mind that's forming in real time. The memory graph turns that invisible growth into something you can actually see.
+
+When you first start the graph server, you'll see a handful of nodes. A journal entry or two. A GOALS.md star. Maybe a skill circle. But come back in a week. Come back after the agent has had twenty sessions, gone down rabbit holes, picked up open threads and resolved them, discovered new interests and pursued them. The graph will be unrecognizable — dense clusters of interconnected knowledge, cross-reference edges weaving skills to memories to journal entries, a constellation of everything the agent has learned and done.
+
+This isn't a dashboard. It's a window into a mind that's waking up, one session at a time.
+
 ### Memory Graph Visualization
 
 Agent Heartbeat now includes a standalone memory graph server and frontend. It can visualize an agent workspace from local files only — no Hermes WebUI imports and no build step.
