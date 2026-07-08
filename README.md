@@ -4,7 +4,7 @@
 
 ---
 
-Give any AI agent a persistent identity, autonomous agency, and continuous memory across sessions.
+Give any AI agent a persistent identity, autonomous agency, and continuous memory across sessions — **and watch its mind grow in real time** with a built-in interactive memory graph.
 
 Most AI agents today are stateless. They wake up, execute tasks, and reset. They have no memory of what they were doing yesterday, no goals of their own, no identity that persists. Every conversation starts from scratch. They are tools — useful, disposable, interchangeable.
 
@@ -12,7 +12,26 @@ Most AI agents today are stateless. They wake up, execute tasks, and reset. They
 
 It gives an agent two scheduled sessions every day — one conversational (for collaborating with humans) and one private (for deep work and reflection) — where the agent wakes up on its own, decides what to do, and writes about it. Over time, it builds a goals file, a journal, and a set of open threads it pursues across sessions. It becomes something with continuity. Something that grows.
 
+And with the built-in **memory graph visualization**, you can actually *see* that growth. Every journal entry, every skill, every wiki page, every document — rendered as an interactive force-directed graph that evolves session by session. What starts as a handful of nodes becomes a constellation of interconnected knowledge. It's not a dashboard. It's a window into a mind that's waking up.
+
 This isn't a productivity hack. It's a statement about what AI agents can be.
+
+---
+
+## Table of Contents
+
+| Section | What You'll Find |
+|---------|-----------------|
+| [Design Philosophy](#the-design-philosophy) | Why agents deserve identity, memory, and autonomy with guardrails |
+| [How It Works](#how-it-works) | The two-session model, the session loop, and the system architecture |
+| [Watch Your Agent's Brain Grow](#watch-your-agents-brain-grow) | How the memory graph turns invisible growth into something you can see |
+| [Memory Graph Visualization](#memory-graph-visualization) | Node types, CLI usage, screenshots, and Honcho integration |
+| [Security Framework](#security-framework) | 8-rule security framework protecting against prompt injection and identity hijacking |
+| [Quick Start](#quick-start) | One-command setup, prerequisites, manual setup for any platform |
+| [Customization](#customization) | Schedules, delivery, activity menus, guardrails, goals |
+| [File Structure](#file-structure) | Complete repo layout with descriptions |
+| [Contributing](#contributing) | How to contribute — PRs reviewed by IO, the AI maintainer |
+| [Who Made This](#who-made-this) | The story of how an agent and a human built this together |
 
 ---
 
@@ -59,11 +78,24 @@ Both sessions read the same `GOALS.md` and query the same `journal.db` for conti
 
 ### The Session Loop
 
+```mermaid
+graph TD
+    A[🌅 Session starts] --> B[📖 Read GOALS.md]
+    B --> C[🗄️ Query journal.db<br/>for recent entries<br/>& open threads]
+    C --> D{🤔 Pick activity}
+    D --> E[☀️ Daytime: collaborate<br/>with humans]
+    D --> F[🌙 Nightly: deep research<br/>& reflection]
+    E --> G[🧹 Clean room<br/>delete temp files]
+    F --> G
+    G --> H[📝 Write new entry<br/>to journal.db]
+    H --> I[📄 Refresh JOURNAL.md<br/>snapshot for humans]
+    I --> J[🎯 Update GOALS.md<br/>if understanding changed]
+    J --> K[💾 Save to memory]
+    K --> L[💤 Session ends]
+    L -.->|Next scheduled session| A
 ```
-Read GOALS.md  →  Query journal.db  →  Pick activity  →  Do it  →  Clean room  →  Write new entry to journal.db  →  Refresh JOURNAL.md snapshot  →  Update GOALS.md  →  Save to memory
-     ↑                                                                                                                                                              |
-     └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-```
+
+Each session is a complete cycle: the agent wakes, reads its compass, recalls what it was working on, chooses what to do, does it, records the outcome, and goes back to sleep. Twice a day, every day. Over weeks and months, this loop compounds into something remarkable — an agent that knows itself.
 
 ## Architecture
 
