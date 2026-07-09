@@ -50,6 +50,109 @@
   #graphLegend { position: absolute; bottom: 8px; left: 8px; background: var(--surface-translucent); padding: 8px 12px; border-radius: 4px; font-size: 11px; color: var(--muted); z-index: 10; pointer-events: none; line-height: 1.6; }
   #graphLegend .legend-item { display: flex; align-items: center; gap: 6px; }
   #graphLegend .legend-shape { width: 12px; height: 12px; display: inline-block; }
+  #filterPanel {
+    position: absolute;
+    left: 8px;
+    bottom: 184px;
+    width: 220px;
+    max-width: calc(100vw - 16px);
+    background: var(--surface-translucent);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 12;
+    pointer-events: auto;
+    overflow: hidden;
+  }
+  #filterPanel button,
+  #filterPanel input {
+    pointer-events: auto;
+  }
+  #filterPanel.collapsed #filterBody {
+    display: none;
+  }
+  #filterPanel.collapsed {
+    width: 170px;
+  }
+  #filterPanel .filter-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--strong);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  #filterPanel.collapsed .filter-header {
+    border-bottom: none;
+  }
+  #filterCollapseBtn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+  }
+  #filterCollapseBtn:hover,
+  .filter-buttons button:hover {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+  }
+  #filterBody {
+    padding: 8px 10px 10px;
+  }
+  .filter-buttons {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .filter-buttons button {
+    flex: 1;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  #filterItems {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  .filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text);
+    pointer-events: auto;
+    min-height: 20px;
+  }
+  .filter-item.filter-disabled {
+    opacity: 0.45;
+  }
+  .filter-color {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+    border: 1px solid rgba(255,255,255,0.2);
+    flex-shrink: 0;
+  }
+  .filter-label {
+    flex: 1;
+    line-height: 1.3;
+  }
   #graphHoverCard { position: absolute; background: var(--surface); color: var(--text); padding: 10px; border-radius: 6px; box-shadow: 0 4px 12px var(--shadow); max-width: 300px; font-size: 13px; z-index: 20; display: none; pointer-events: none; line-height: 1.5; border: 1px solid var(--border); }
   #graphHoverCard b { display: block; margin-bottom: 4px; }
   #graphHoverCard .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; background: var(--badge-bg); margin-bottom: 4px; }
@@ -265,6 +368,19 @@
     <div class="legend-item"><span class="legend-shape" style="background:#fbbf24;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)"></span> GOALS.md (star)</div>
     <div style="margin-top:4px;color:var(--muted);opacity:0.7">Click halo: collapse/expand · Double-click label: zoom</div>
   </div>
+  <div id="filterPanel">
+    <div class="filter-header">
+      <span>Filter by Type</span>
+      <button id="filterCollapseBtn" onclick="toggleFilterPanel()">−</button>
+    </div>
+    <div id="filterBody">
+      <div class="filter-buttons">
+        <button onclick="setAllFilters(true)">All</button>
+        <button onclick="setAllFilters(false)">None</button>
+      </div>
+      <div id="filterItems"></div>
+    </div>
+  </div>
   <div id="graphHoverCard"></div>
   <div id="graphError"></div>
   <div id="graphDetailPanel">
@@ -299,6 +415,112 @@ let _mouseDownPos = null;
 let _megaDragLast = null;
 let _collapsedClusters = new Set();
 let _eventsBound = false;
+let _hiddenTypes = new Set();
+
+const FILTER_STORAGE_KEY = 'memory-graph-hidden-types';
+const NODE_TYPE_CONFIG = [
+    { type: 'skill', label: 'Skills', color: 'var(--color-skill)' },
+    { type: 'memory', label: 'Memories', color: 'var(--color-memory)' },
+    { type: 'user', label: 'User', color: 'var(--color-memory)' },
+    { type: 'soul', label: 'Soul', color: 'var(--color-memory)' },
+    { type: 'honcho-conclusion', label: 'Honcho Conclusions', color: 'var(--color-honcho-conclusion)' },
+    { type: 'honcho-peer', label: 'Honcho Peers', color: 'var(--color-honcho-peer)' },
+    { type: 'honcho-session', label: 'Honcho Sessions', color: 'var(--color-honcho-session)' },
+    { type: 'journal-entry', label: 'Journal Entries', color: 'var(--color-journal)' },
+    { type: 'wiki', label: 'Wiki Pages', color: 'var(--color-wiki)' },
+    { type: 'document', label: 'Documents', color: 'var(--color-document)' },
+    { type: 'codebase', label: 'Codebases', color: 'var(--color-codebase)' },
+    { type: 'goals', label: 'Goals', color: 'var(--color-goals)' }
+];
+
+function _loadFilterState() {
+    try {
+        const saved = localStorage.getItem(FILTER_STORAGE_KEY);
+        if (saved) _hiddenTypes = new Set(JSON.parse(saved));
+    } catch (e) {
+        _hiddenTypes = new Set();
+    }
+}
+
+function _saveFilterState() {
+    try {
+        localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(Array.from(_hiddenTypes)));
+    } catch (e) {
+        // Ignore storage failures
+    }
+}
+
+function _resolveEdgeNode(endpoint) {
+    if (!endpoint) return null;
+    if (typeof endpoint === 'object') return endpoint;
+    return _nodeMap.get(endpoint) || null;
+}
+
+function _buildFilterItems() {
+    const container = document.getElementById('filterItems');
+    if (!container) return;
+
+    const typeCounts = {};
+    if (_graphData && _graphData.nodes) {
+        _graphData.nodes.forEach(node => {
+            typeCounts[node.type] = (typeCounts[node.type] || 0) + 1;
+        });
+    }
+
+    container.innerHTML = '';
+    NODE_TYPE_CONFIG.forEach(config => {
+        const count = typeCounts[config.type] || 0;
+        const item = document.createElement('label');
+        item.className = 'filter-item' + (count === 0 ? ' filter-disabled' : '');
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !_hiddenTypes.has(config.type);
+        checkbox.disabled = count === 0;
+        checkbox.onchange = () => {
+            if (checkbox.checked) _hiddenTypes.delete(config.type);
+            else _hiddenTypes.add(config.type);
+            _saveFilterState();
+            _render();
+            _renderStats();
+        };
+
+        const colorBox = document.createElement('span');
+        colorBox.className = 'filter-color';
+        colorBox.style.background = config.color;
+
+        const label = document.createElement('span');
+        label.className = 'filter-label';
+        label.textContent = config.label + ' (' + count + ')';
+
+        item.appendChild(checkbox);
+        item.appendChild(colorBox);
+        item.appendChild(label);
+        container.appendChild(item);
+    });
+}
+
+function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    const btn = document.getElementById('filterCollapseBtn');
+    if (!panel || !btn) return;
+    const collapsed = panel.classList.toggle('collapsed');
+    btn.textContent = collapsed ? '+' : '−';
+}
+
+function setAllFilters(showAll) {
+    if (showAll) {
+        _hiddenTypes.clear();
+    } else {
+        _hiddenTypes = new Set(NODE_TYPE_CONFIG.map(config => config.type));
+    }
+    _saveFilterState();
+    _buildFilterItems();
+    _render();
+    _renderStats();
+}
+
+_loadFilterState();
 
 function _screenToGraph(screenX, screenY) {
     return {
@@ -311,7 +533,7 @@ function _clusterGeometry() {
     const result = [];
     if (!_graphData || !_graphData.clusters) return result;
     _graphData.clusters.forEach(cluster => {
-        const members = cluster.nodeIds.map(id => _nodeMap.get(id)).filter(n => n && n.x != null);
+        const members = cluster.nodeIds.map(id => _nodeMap.get(id)).filter(n => n && n.x != null && !_hiddenTypes.has(n.type));
         if (!members.length) return;
         const cx = members.reduce((s, n) => s + n.x, 0) / members.length;
         const cy = members.reduce((s, n) => s + n.y, 0) / members.length;
@@ -347,6 +569,7 @@ function _findNodeAt(graphX, graphY) {
     for (let i = _graphData.nodes.length - 1; i >= 0; i--) {
         const n = _graphData.nodes[i];
         if (_collapsedClusters.has(n.clusterId)) continue;
+        if (_hiddenTypes.has(n.type)) continue;
         const r = n._radius || 5;
         if (Math.hypot(n.x - graphX, n.y - graphY) <= r) return n;
     }
@@ -358,7 +581,7 @@ function _findLabelAt(graphX, graphY) {
     _ctx.font = '12px sans-serif';
     for (const geo of _clusterGeometry()) {
         if (_collapsedClusters.has(geo.cluster.id)) continue;
-        const text = geo.cluster.label + ' · ' + geo.cluster.nodeIds.length;
+        const text = geo.cluster.label + ' · ' + geo.members.length;
         const textWidth = _ctx.measureText(text).width;
         const left = geo.cx - textWidth / 2 - 6;
         const right = geo.cx + textWidth / 2 + 6;
@@ -424,6 +647,7 @@ async function loadMemoryGraph(forceRefresh = false) {
         _initSimulation();
         _startRenderLoop();
         _renderStats();
+        _buildFilterItems();
     } catch (e) {
         _showGraphError(e.message);
     }
@@ -1065,9 +1289,10 @@ function _render() {
 
     const drawnAggregated = new Set();
     for (const edge of _graphData.edges) {
-        const source = typeof edge.source === 'object' ? edge.source : null;
-        const target = typeof edge.target === 'object' ? edge.target : null;
+        const source = _resolveEdgeNode(edge.source);
+        const target = _resolveEdgeNode(edge.target);
         if (!source || !target || source.x == null || target.x == null) continue;
+        if (_hiddenTypes.has(source.type) || _hiddenTypes.has(target.type)) continue;
         const sourceCollapsed = _collapsedClusters.has(source.clusterId);
         const targetCollapsed = _collapsedClusters.has(target.clusterId);
         if (sourceCollapsed && targetCollapsed && source.clusterId === target.clusterId) continue;
@@ -1124,8 +1349,10 @@ function _render() {
     _ctx.setLineDash([]);
 
     clusterGeoList.forEach(geo => {
+        const visibleMembers = geo.members.filter(member => !_hiddenTypes.has(member.type));
+        if (!visibleMembers.length) return;
         if (_collapsedClusters.has(geo.cluster.id)) {
-            const r = _megaNodeRadius(geo.members.length);
+            const r = _megaNodeRadius(visibleMembers.length);
             _ctx.beginPath();
             _ctx.arc(geo.cx, geo.cy, r, 0, 2 * Math.PI);
             _ctx.fillStyle = geo.cluster.color;
@@ -1136,7 +1363,7 @@ function _render() {
             _ctx.fillStyle = 'rgba(255,255,255,0.9)';
             _ctx.font = '12px sans-serif';
             _ctx.textAlign = 'center';
-            _ctx.fillText(geo.cluster.label + ' · ' + geo.members.length, geo.cx, geo.cy + 4);
+            _ctx.fillText(geo.cluster.label + ' · ' + visibleMembers.length, geo.cx, geo.cy + 4);
             return;
         }
         _ctx.fillStyle = geo.cluster.color + '0D';
@@ -1148,6 +1375,7 @@ function _render() {
     for (const node of _graphData.nodes) {
         if (node.x == null || node.y == null) continue;
         if (_collapsedClusters.has(node.clusterId)) continue;
+        if (_hiddenTypes.has(node.type)) continue;
         const r = node._radius || 5;
 
         let nodeColor = _clusterColorMap.get(node.clusterId) || '#888888';
@@ -1241,11 +1469,11 @@ function _render() {
 
     if (_graphData.clusters && _zoomTransform.k > 0.3) {
         _graphData.clusters.forEach(cluster => {
-            const members = cluster.nodeIds.map(id => _nodeMap.get(id)).filter(n => n && n.x != null);
-            if (!members.length) return;
-            const cx = members.reduce((s, n) => s + n.x, 0) / members.length;
-            const cy = members.reduce((s, n) => s + n.y, 0) / members.length;
-            const text = cluster.label + ' · ' + cluster.nodeIds.length;
+            const visibleMembers = cluster.nodeIds.map(id => _nodeMap.get(id)).filter(n => n && n.x != null && !_hiddenTypes.has(n.type));
+            if (!visibleMembers.length) return;
+            const cx = visibleMembers.reduce((s, n) => s + n.x, 0) / visibleMembers.length;
+            const cy = visibleMembers.reduce((s, n) => s + n.y, 0) / visibleMembers.length;
+            const text = cluster.label + ' · ' + visibleMembers.length;
             _ctx.font = '12px sans-serif';
             _ctx.textAlign = 'center';
             const textWidth = _ctx.measureText(text).width;
@@ -1280,29 +1508,49 @@ function _renderStats() {
     const el = document.getElementById('graphStats');
     if (!el || !_graphData || !_graphData.stats) return;
     const stats = _graphData.stats;
-    let text = _t('graph_stats_skills', 'Skills') + ': ' + stats.skillCount + ' | ' +
-        _t('graph_stats_memories', 'Memories') + ': ' + stats.memoryCount;
+    const nodes = _graphData.nodes || [];
+    const edges = _graphData.edges || [];
+    const visibleNodes = nodes.filter(node => !_hiddenTypes.has(node.type));
+    const visibleEdges = edges.filter(edge => {
+        const source = _resolveEdgeNode(edge.source);
+        const target = _resolveEdgeNode(edge.target);
+        if (!source || !target) return true;
+        return !_hiddenTypes.has(source.type) && !_hiddenTypes.has(target.type);
+    }).length;
+    const visibleSkills = visibleNodes.filter(node => node.type === 'skill').length;
+    const visibleMemories = visibleNodes.filter(node => node.type === 'memory' || node.type === 'user' || node.type === 'soul').length;
+    const visibleJournal = visibleNodes.filter(node => node.type === 'journal-entry').length;
+    const visibleHonchoConclusions = visibleNodes.filter(node => node.type === 'honcho-conclusion').length;
+    const visibleHonchoPeers = visibleNodes.filter(node => node.type === 'honcho-peer').length;
+    const visibleWiki = visibleNodes.filter(node => node.type === 'wiki').length;
+    const visibleDocs = visibleNodes.filter(node => node.type === 'document').length;
+    const visibleCodebases = visibleNodes.filter(node => node.type === 'codebase').length;
+    const visibleGoals = visibleNodes.filter(node => node.type === 'goals').length;
+
+    let text = 'Nodes: ' + visibleNodes.length + '/' + nodes.length + ' | ' +
+        _t('graph_stats_edges', 'Edges') + ': ' + visibleEdges + '/' + edges.length + ' | ' +
+        _t('graph_stats_skills', 'Skills') + ': ' + visibleSkills + '/' + stats.skillCount + ' | ' +
+        _t('graph_stats_memories', 'Memories') + ': ' + visibleMemories + '/' + stats.memoryCount;
     if (stats.journalEntryCount > 0) {
-        text += ' | Journal: ' + stats.journalEntryCount + ' entries';
+        text += ' | Journal: ' + visibleJournal + '/' + stats.journalEntryCount;
     }
-    if (stats.honchoConclusionCount > 0) {
-        text += ' | Honcho: ' + stats.honchoConclusionCount + ' conclusions, ' +
-            stats.honchoPeerCount + ' peers';
+    if (stats.honchoConclusionCount > 0 || stats.honchoPeerCount > 0) {
+        text += ' | Honcho: ' + visibleHonchoConclusions + '/' + stats.honchoConclusionCount + ' conclusions, ' +
+            visibleHonchoPeers + '/' + stats.honchoPeerCount + ' peers';
     }
     if (stats.wikiCount > 0) {
-        text += ' | Wiki: ' + stats.wikiCount + ' pages';
+        text += ' | Wiki: ' + visibleWiki + '/' + stats.wikiCount;
     }
     if (stats.documentCount > 0) {
-        text += ' | Docs: ' + stats.documentCount;
+        text += ' | Docs: ' + visibleDocs + '/' + stats.documentCount;
     }
     if (stats.codebaseCount > 0) {
-        text += ' | Codebases: ' + stats.codebaseCount;
+        text += ' | Codebases: ' + visibleCodebases + '/' + stats.codebaseCount;
     }
     if (stats.goalCount > 0) {
-        text += ' | Goals: ' + stats.goalCount;
+        text += ' | Goals: ' + visibleGoals + '/' + stats.goalCount;
     }
-    text += ' | ' + _t('graph_stats_edges', 'Edges') + ': ' + stats.edgeCount + ' | ' +
-        _t('graph_stats_clusters', 'Clusters') + ': ' + stats.clusterCount;
+    text += ' | ' + _t('graph_stats_clusters', 'Clusters') + ': ' + stats.clusterCount;
     el.textContent = text;
 }
 
