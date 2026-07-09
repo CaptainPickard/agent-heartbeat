@@ -411,12 +411,14 @@ let _megaDragLast = null;
 let _collapsedClusters = new Set();
 let _eventsBound = false;
 let _hiddenTypes = new Set();
+let _hiddenEdgeTypes = new Set();
 let _searchQuery = '';
 let _searchMatchIds = new Set();
 let _searchDebounceTimer = null;
 let _hoveredEdge = null;
 
 const FILTER_STORAGE_KEY = 'memory-graph-hidden-types';
+const EDGE_FILTER_STORAGE_KEY = 'memory-graph-hidden-edge-types';
 const EDGE_TYPE_LABELS = {
     related_skills: 'Related Skills',
     tag_overlap: 'Tag Overlap',
@@ -461,6 +463,23 @@ function _loadFilterState() {
 function _saveFilterState() {
     try {
         localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(Array.from(_hiddenTypes)));
+    } catch (e) {
+        // Ignore storage failures
+    }
+}
+
+function _loadEdgeFilterState() {
+    try {
+        const saved = localStorage.getItem(EDGE_FILTER_STORAGE_KEY);
+        if (saved) _hiddenEdgeTypes = new Set(JSON.parse(saved));
+    } catch (e) {
+        _hiddenEdgeTypes = new Set();
+    }
+}
+
+function _saveEdgeFilterState() {
+    try {
+        localStorage.setItem(EDGE_FILTER_STORAGE_KEY, JSON.stringify(Array.from(_hiddenEdgeTypes)));
     } catch (e) {
         // Ignore storage failures
     }
@@ -520,6 +539,49 @@ function _buildFilterItems() {
         item.appendChild(label);
         container.appendChild(item);
     });
+
+    _buildEdgeFilterItems();
+}
+
+function _buildEdgeFilterItems() {
+    const container = document.getElementById('filterItems');
+    if (!container || !_graphData) return;
+
+    const typeCounts = {};
+    _graphData.edges.forEach(edge => {
+        typeCounts[edge.type] = (typeCounts[edge.type] || 0) + 1;
+    });
+
+    const sep = document.createElement('div');
+    sep.style.cssText = 'border-top:1px solid var(--border-subtle);margin:8px 0 4px;padding-top:6px;font-size:11px;font-weight:600;color:var(--muted);';
+    sep.textContent = 'Edge Types';
+    container.appendChild(sep);
+
+    Object.keys(EDGE_TYPE_LABELS).forEach(edgeType => {
+        const count = typeCounts[edgeType] || 0;
+        const item = document.createElement('label');
+        item.className = 'filter-item' + (count === 0 ? ' filter-disabled' : '');
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = !_hiddenEdgeTypes.has(edgeType);
+        checkbox.disabled = count === 0;
+        checkbox.onchange = () => {
+            if (checkbox.checked) _hiddenEdgeTypes.delete(edgeType);
+            else _hiddenEdgeTypes.add(edgeType);
+            _saveEdgeFilterState();
+            _render();
+            _renderStats();
+        };
+
+        const label = document.createElement('span');
+        label.className = 'filter-label';
+        label.textContent = EDGE_TYPE_LABELS[edgeType] + ' (' + count + ')';
+
+        item.appendChild(checkbox);
+        item.appendChild(label);
+        container.appendChild(item);
+    });
 }
 
 function toggleFilterDropdown() {
@@ -544,16 +606,20 @@ document.addEventListener('click', function(e) {
 function setAllFilters(showAll) {
     if (showAll) {
         _hiddenTypes.clear();
+        _hiddenEdgeTypes.clear();
     } else {
         _hiddenTypes = new Set(NODE_TYPE_CONFIG.map(config => config.type));
+        _hiddenEdgeTypes = new Set(Object.keys(EDGE_TYPE_LABELS));
     }
     _saveFilterState();
+    _saveEdgeFilterState();
     _buildFilterItems();
     _render();
     _renderStats();
 }
 
 _loadFilterState();
+_loadEdgeFilterState();
 
 function _nodeMatchesSearch(node) {
     if (!_searchQuery) return false;
@@ -704,6 +770,7 @@ function _findEdgeAt(graphX, graphY) {
         const target = _resolveEdgeNode(edge.target);
         if (!source || !target || source.x == null || target.x == null) continue;
         if (_hiddenTypes.has(source.type) || _hiddenTypes.has(target.type)) continue;
+        if (_hiddenEdgeTypes.has(edge.type)) continue;
 
         const sourceCollapsed = _collapsedClusters.has(source.clusterId);
         const targetCollapsed = _collapsedClusters.has(target.clusterId);
@@ -1523,6 +1590,7 @@ function _render() {
         const target = _resolveEdgeNode(edge.target);
         if (!source || !target || source.x == null || target.x == null) continue;
         if (_hiddenTypes.has(source.type) || _hiddenTypes.has(target.type)) continue;
+        if (_hiddenEdgeTypes.has(edge.type)) continue;
         const sourceCollapsed = _collapsedClusters.has(source.clusterId);
         const targetCollapsed = _collapsedClusters.has(target.clusterId);
         if (sourceCollapsed && targetCollapsed && source.clusterId === target.clusterId) continue;
@@ -1766,6 +1834,7 @@ function _renderStats() {
     const edges = _graphData.edges || [];
     const visibleNodes = nodes.filter(node => !_hiddenTypes.has(node.type));
     const visibleEdges = edges.filter(edge => {
+        if (_hiddenEdgeTypes.has(edge.type)) return false;
         const source = _resolveEdgeNode(edge.source);
         const target = _resolveEdgeNode(edge.target);
         if (!source || !target) return true;
