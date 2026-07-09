@@ -50,109 +50,52 @@
   #graphLegend { position: absolute; bottom: 8px; left: 8px; background: var(--surface-translucent); padding: 8px 12px; border-radius: 4px; font-size: 11px; color: var(--muted); z-index: 10; pointer-events: none; line-height: 1.6; }
   #graphLegend .legend-item { display: flex; align-items: center; gap: 6px; }
   #graphLegend .legend-shape { width: 12px; height: 12px; display: inline-block; }
-  #filterPanel {
-    position: absolute;
-    left: 8px;
-    bottom: 184px;
-    width: 220px;
-    max-width: calc(100vw - 16px);
-    background: var(--surface-translucent);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px var(--shadow);
-    z-index: 12;
-    pointer-events: auto;
-    overflow: hidden;
+  /* Filter dropdown — hangs from topbar button */
+  #filterBtn {
+    background: none; border: 1px solid var(--border); color: var(--text);
+    padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px;
   }
-  #filterPanel button,
-  #filterPanel input {
-    pointer-events: auto;
+  #filterBtn:hover { background: var(--accent-bg); border-color: var(--accent); }
+  #filterBtn.active { background: var(--accent-bg); border-color: var(--accent); }
+  #filterDropdown {
+    position: fixed; top: 44px; right: 12px;
+    width: 240px; max-width: calc(100vw - 24px);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; box-shadow: 0 4px 16px var(--shadow);
+    z-index: 99; overflow: hidden; display: none;
   }
-  #filterPanel.collapsed #filterBody {
-    display: none;
+  #filterDropdown.open { display: block; }
+  #filterDropdown .filter-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 8px 12px; font-size: 12px; font-weight: 600;
+    color: var(--strong); border-bottom: 1px solid var(--border-subtle);
   }
-  #filterPanel.collapsed {
-    width: 170px;
+  #filterDropdown .filter-header .filter-close {
+    background: none; border: 1px solid var(--border); color: var(--text);
+    width: 24px; height: 24px; border-radius: 4px; cursor: pointer;
+    font-size: 14px; line-height: 1;
   }
-  #filterPanel .filter-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 8px 10px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--strong);
-    border-bottom: 1px solid var(--border-subtle);
+  #filterDropdown .filter-header .filter-close:hover {
+    background: var(--accent-bg); border-color: var(--accent);
   }
-  #filterPanel.collapsed .filter-header {
-    border-bottom: none;
-  }
-  #filterCollapseBtn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text);
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-  }
-  #filterCollapseBtn:hover,
-  .filter-buttons button:hover {
-    background: var(--accent-bg);
-    border-color: var(--accent);
-  }
-  #filterBody {
-    padding: 8px 10px 10px;
-  }
-  .filter-buttons {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 8px;
-  }
+  #filterDropdownBody { padding: 8px 12px 12px; }
+  .filter-buttons { display: flex; gap: 6px; margin-bottom: 8px; }
   .filter-buttons button {
-    flex: 1;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 4px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 11px;
+    flex: 1; background: none; border: 1px solid var(--border); color: var(--text);
+    padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;
   }
-  #filterItems {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    max-height: 280px;
-    overflow-y: auto;
-  }
+  .filter-buttons button:hover { background: var(--accent-bg); border-color: var(--accent); }
+  #filterItems { display: flex; flex-direction: column; gap: 5px; max-height: 320px; overflow-y: auto; }
   .filter-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 11px;
-    color: var(--text);
-    pointer-events: auto;
-    min-height: 20px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--text); min-height: 20px; cursor: pointer;
   }
-  .filter-item.filter-disabled {
-    opacity: 0.45;
-  }
+  .filter-item.filter-disabled { opacity: 0.45; }
   .filter-color {
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    display: inline-block;
-    border: 1px solid rgba(255,255,255,0.2);
-    flex-shrink: 0;
+    width: 10px; height: 10px; border-radius: 2px; display: inline-block;
+    border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0;
   }
-  .filter-label {
-    flex: 1;
-    line-height: 1.3;
-  }
+  .filter-label { flex: 1; line-height: 1.3; }
   #graphHoverCard { position: absolute; background: var(--surface); color: var(--text); padding: 10px; border-radius: 6px; box-shadow: 0 4px 12px var(--shadow); max-width: 300px; font-size: 13px; z-index: 20; display: none; pointer-events: none; line-height: 1.5; border: 1px solid var(--border); }
   #graphHoverCard b { display: block; margin-bottom: 4px; }
   #graphHoverCard .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; background: var(--badge-bg); margin-bottom: 4px; }
@@ -349,7 +292,22 @@
   </a>
   <div id="topbarTitle">Agent Memory Graph</div>
   <div id="topbarSpacer"></div>
+  <button id="filterBtn" onclick="toggleFilterDropdown()">Filter</button>
   <button id="refreshBtn" onclick="loadMemoryGraph(true)">Refresh</button>
+</div>
+
+<div id="filterDropdown">
+  <div class="filter-header">
+    <span>Filter by Type</span>
+    <button class="filter-close" onclick="toggleFilterDropdown()">×</button>
+  </div>
+  <div id="filterDropdownBody">
+    <div class="filter-buttons">
+      <button onclick="setAllFilters(true)">All</button>
+      <button onclick="setAllFilters(false)">None</button>
+    </div>
+    <div id="filterItems"></div>
+  </div>
 </div>
 
 <div id="graphCanvasContainer">
@@ -367,19 +325,6 @@
     <div class="legend-item"><span class="legend-shape" style="background:#a855f7;border:2px solid #fff"></span> Codebases (purple square)</div>
     <div class="legend-item"><span class="legend-shape" style="background:#fbbf24;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)"></span> GOALS.md (star)</div>
     <div style="margin-top:4px;color:var(--muted);opacity:0.7">Click halo: collapse/expand · Double-click label: zoom</div>
-  </div>
-  <div id="filterPanel">
-    <div class="filter-header">
-      <span>Filter by Type</span>
-      <button id="filterCollapseBtn" onclick="toggleFilterPanel()">−</button>
-    </div>
-    <div id="filterBody">
-      <div class="filter-buttons">
-        <button onclick="setAllFilters(true)">All</button>
-        <button onclick="setAllFilters(false)">None</button>
-      </div>
-      <div id="filterItems"></div>
-    </div>
   </div>
   <div id="graphHoverCard"></div>
   <div id="graphError"></div>
@@ -500,13 +445,24 @@ function _buildFilterItems() {
     });
 }
 
-function toggleFilterPanel() {
-    const panel = document.getElementById('filterPanel');
-    const btn = document.getElementById('filterCollapseBtn');
-    if (!panel || !btn) return;
-    const collapsed = panel.classList.toggle('collapsed');
-    btn.textContent = collapsed ? '+' : '−';
+function toggleFilterDropdown() {
+    const dropdown = document.getElementById('filterDropdown');
+    const btn = document.getElementById('filterBtn');
+    if (!dropdown || !btn) return;
+    const isOpen = dropdown.classList.toggle('open');
+    btn.classList.toggle('active', isOpen);
 }
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    const dropdown = document.getElementById('filterDropdown');
+    const btn = document.getElementById('filterBtn');
+    if (!dropdown || !btn) return;
+    if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
+        dropdown.classList.remove('open');
+        btn.classList.remove('active');
+    }
+});
 
 function setAllFilters(showAll) {
     if (showAll) {
