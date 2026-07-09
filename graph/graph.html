@@ -783,14 +783,14 @@ function _badgeColorForType(type) {
         memory: 'var(--color-memory)',
         user: 'var(--accent)',
         soul: 'var(--accent)',
+        document: 'var(--color-document, #3b82f6)',
+        codebase: 'var(--color-codebase, #a855f7)',
+        goals: 'var(--color-goals, #fbbf24)',
         'honcho-conclusion': 'var(--color-honcho-conclusion)',
         'honcho-peer': 'var(--color-honcho-peer)',
         'honcho-session': 'var(--color-honcho-session)',
         'journal-entry': 'var(--color-journal)',
         wiki: 'var(--color-wiki)',
-        document: 'var(--color-document, #3b82f6)',
-        codebase: 'var(--color-codebase, #a855f7)',
-        goals: 'var(--color-goals, #fbbf24)',
         cluster: 'var(--accent)'
     };
     return colors[type] || 'var(--badge-bg)';
