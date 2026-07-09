@@ -409,6 +409,7 @@ let _isDragging = false;
 let _mouseDownPos = null;
 let _megaDragLast = null;
 let _collapsedClusters = new Set();
+let _pinnedNodeIds = new Set();
 let _eventsBound = false;
 let _hiddenTypes = new Set();
 let _hiddenEdgeTypes = new Set();
@@ -867,6 +868,7 @@ async function loadMemoryGraph(forceRefresh = false) {
         _hideGraphLoading();
         _hideGraphError();
         _collapsedClusters = new Set();
+        _pinnedNodeIds.clear();
         _hoveredEdge = null;
         _updateSearchMatches();
         _initSimulation();
@@ -1028,8 +1030,13 @@ function _setupZoomAndDrag() {
                 if (event.subject._isMega) {
                     event.subject._members.forEach(m => { m.fx = null; m.fy = null; });
                 } else {
-                    event.subject.fx = null;
-                    event.subject.fy = null;
+                    if (_pinnedNodeIds.has(event.subject.id)) {
+                        event.subject.fx = event.x;
+                        event.subject.fy = event.y;
+                    } else {
+                        event.subject.fx = null;
+                        event.subject.fy = null;
+                    }
                 }
             }
         });
@@ -1045,6 +1052,7 @@ function _setupZoomAndDrag() {
         _canvas.addEventListener('mouseleave', () => {
             _hideHoverCard();
             _setHoveredEdge(null);
+            _canvas.style.cursor = 'grab';
         });
         _canvas.addEventListener('click', _handleGraphClick);
         _canvas.addEventListener('dblclick', _handleGraphDblClick);
@@ -1468,6 +1476,7 @@ function _handleGraphMouseMove(event) {
     if (_isDragging || !_graphData) {
         _hideHoverCard();
         _setHoveredEdge(null);
+        if (_canvas) _canvas.style.cursor = 'grab';
         return;
     }
     const pos = _screenToGraph(event.offsetX, event.offsetY);
@@ -1475,15 +1484,18 @@ function _handleGraphMouseMove(event) {
     if (node) {
         _setHoveredEdge(null);
         _showHoverCard(node, event.offsetX, event.offsetY);
+        if (_canvas) _canvas.style.cursor = _pinnedNodeIds.has(node.id) ? 'pointer' : 'grab';
         return;
     }
     const edge = _findEdgeAt(pos.x, pos.y);
     if (edge) {
         _setHoveredEdge(edge);
         _showEdgeHoverCard(edge, event.offsetX, event.offsetY);
+        if (_canvas) _canvas.style.cursor = 'grab';
     } else {
         _setHoveredEdge(null);
         _hideHoverCard();
+        if (_canvas) _canvas.style.cursor = 'grab';
     }
 }
 
@@ -1518,6 +1530,25 @@ function _handleGraphClick(event) {
 function _handleGraphDblClick(event) {
     if (!_graphData || !_zoomBehavior) return;
     const pos = _screenToGraph(event.offsetX, event.offsetY);
+    const node = _findNodeAt(pos.x, pos.y);
+    if (node && !node._isMega) {
+        event.preventDefault();
+        if (_pinnedNodeIds.has(node.id)) {
+            _pinnedNodeIds.delete(node.id);
+            node.fx = null;
+            node.fy = null;
+            _simulation.alphaTarget(0.3).restart();
+            setTimeout(() => {
+                if (_simulation) _simulation.alphaTarget(0);
+            }, 500);
+        } else {
+            _pinnedNodeIds.add(node.id);
+            node.fx = node.x;
+            node.fy = node.y;
+        }
+        _render();
+        return;
+    }
     const geo = _findLabelAt(pos.x, pos.y);
     if (!geo) return;
     event.preventDefault();
@@ -1775,6 +1806,15 @@ function _render() {
             _ctx.beginPath();
             _ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
             _ctx.strokeStyle = 'rgba(245, 180, 25, 0.5)';
+            _ctx.lineWidth = 2;
+            _ctx.stroke();
+            _ctx.globalAlpha = searchOpacity;
+        }
+        if (_pinnedNodeIds.has(node.id)) {
+            _ctx.globalAlpha = 1.0;
+            _ctx.beginPath();
+            _ctx.arc(node.x, node.y, r + 3, 0, 2 * Math.PI);
+            _ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
             _ctx.lineWidth = 2;
             _ctx.stroke();
             _ctx.globalAlpha = searchOpacity;
