@@ -41,6 +41,40 @@
   #backBtn:hover { background: var(--accent-bg); border-color: var(--accent); }
   #topbarTitle { font-size: 14px; font-weight: 600; color: var(--muted); }
   #topbarSpacer { flex: 1; }
+  #searchBox {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px 4px 28px;
+    border-radius: 4px;
+    font-size: 13px;
+    width: 200px;
+    outline: none;
+  }
+  #searchBox:focus { border-color: var(--accent); }
+  #searchBox::placeholder { color: var(--muted); }
+  #searchWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  #searchWrapper .search-icon {
+    position: absolute;
+    left: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    pointer-events: none;
+  }
+  #searchClearBtn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+    display: none;
+  }
+  #searchClearBtn:hover { color: var(--text); }
   #refreshBtn { background: none; border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
   #refreshBtn:hover { background: var(--accent-bg); border-color: var(--accent); }
   #graphCanvasContainer { position: absolute; top: 44px; left: 0; right: 0; bottom: 0; overflow: hidden; }
@@ -292,6 +326,11 @@
   </a>
   <div id="topbarTitle">Agent Memory Graph</div>
   <div id="topbarSpacer"></div>
+  <div id="searchWrapper">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchBox" placeholder="Search nodes..." autocomplete="off">
+    <button id="searchClearBtn" onclick="clearSearch()">×</button>
+  </div>
   <button id="filterBtn" onclick="toggleFilterDropdown()">Filter</button>
   <button id="refreshBtn" onclick="loadMemoryGraph(true)">Refresh</button>
 </div>
@@ -361,6 +400,9 @@ let _megaDragLast = null;
 let _collapsedClusters = new Set();
 let _eventsBound = false;
 let _hiddenTypes = new Set();
+let _searchQuery = '';
+let _searchMatchIds = new Set();
+let _searchDebounceTimer = null;
 
 const FILTER_STORAGE_KEY = 'memory-graph-hidden-types';
 const NODE_TYPE_CONFIG = [
@@ -477,6 +519,64 @@ function setAllFilters(showAll) {
 }
 
 _loadFilterState();
+
+function _nodeMatchesSearch(node) {
+    if (!_searchQuery) return false;
+    const q = _searchQuery.toLowerCase();
+    if (node.label && node.label.toLowerCase().includes(q)) return true;
+    if (node.preview && node.preview.toLowerCase().includes(q)) return true;
+    if (node.category && node.category.toLowerCase().includes(q)) return true;
+    if (node.wiki_type && node.wiki_type.toLowerCase().includes(q)) return true;
+    if (node.tags && Array.isArray(node.tags)) {
+        for (const tag of node.tags) {
+            if (typeof tag === 'string' && tag.toLowerCase().includes(q)) return true;
+        }
+    }
+    return false;
+}
+
+function _updateSearchMatches() {
+    _searchMatchIds.clear();
+    if (!_searchQuery || !_graphData) return;
+    _graphData.nodes.forEach(node => {
+        if (_nodeMatchesSearch(node)) _searchMatchIds.add(node.id);
+    });
+}
+
+function onSearchInput(value) {
+    _searchQuery = value.trim();
+    const clearBtn = document.getElementById('searchClearBtn');
+    if (clearBtn) clearBtn.style.display = _searchQuery ? 'block' : 'none';
+    if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+    _searchDebounceTimer = setTimeout(() => {
+        _updateSearchMatches();
+        _render();
+        _renderStats();
+    }, 150);
+}
+
+function clearSearch() {
+    _searchQuery = '';
+    _searchMatchIds.clear();
+    if (_searchDebounceTimer) {
+        clearTimeout(_searchDebounceTimer);
+        _searchDebounceTimer = null;
+    }
+    const input = document.getElementById('searchBox');
+    if (input) input.value = '';
+    const clearBtn = document.getElementById('searchClearBtn');
+    if (clearBtn) clearBtn.style.display = 'none';
+    _render();
+    _renderStats();
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && _searchQuery) {
+        clearSearch();
+        const input = document.getElementById('searchBox');
+        if (input) input.blur();
+    }
+});
 
 function _screenToGraph(screenX, screenY) {
     return {
@@ -600,6 +700,7 @@ async function loadMemoryGraph(forceRefresh = false) {
         _graphData = await res.json();
         _hideGraphError();
         _collapsedClusters = new Set();
+        _updateSearchMatches();
         _initSimulation();
         _startRenderLoop();
         _renderStats();
@@ -1260,6 +1361,9 @@ function _render() {
             if (drawnAggregated.has(aggKey)) continue;
             drawnAggregated.add(aggKey);
         }
+        const sourceMatch = !_searchQuery || _searchMatchIds.has(source.id);
+        const targetMatch = !_searchQuery || _searchMatchIds.has(target.id);
+        const edgeOpacity = _searchQuery ? ((sourceMatch && targetMatch) ? 1.0 : 0.1) : 1.0;
         const sourcePos = _visualPosFor(source);
         const targetPos = _visualPosFor(target);
         _ctx.beginPath();
@@ -1300,7 +1404,9 @@ function _render() {
             _ctx.setLineDash([]);
             _ctx.lineWidth = edge.weight >= 3 ? 2 : 1;
         }
+        _ctx.globalAlpha = edgeOpacity;
         _ctx.stroke();
+        _ctx.globalAlpha = 1.0;
     }
     _ctx.setLineDash([]);
 
@@ -1333,6 +1439,8 @@ function _render() {
         if (_collapsedClusters.has(node.clusterId)) continue;
         if (_hiddenTypes.has(node.type)) continue;
         const r = node._radius || 5;
+        const isSearchMatch = !_searchQuery || _searchMatchIds.has(node.id);
+        const searchOpacity = _searchQuery ? (isSearchMatch ? 1.0 : 0.1) : 1.0;
 
         let nodeColor = _clusterColorMap.get(node.clusterId) || '#888888';
         if (node.type === 'honcho-conclusion') nodeColor = '#fbbf24';
@@ -1409,11 +1517,21 @@ function _render() {
             _ctx.lineTo(node.x - size / 2, node.y);
             _ctx.closePath();
         }
+        _ctx.globalAlpha = searchOpacity;
         _ctx.fillStyle = nodeColor;
         _ctx.fill();
         _ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         if (node.type !== 'codebase') _ctx.lineWidth = 1;
         _ctx.stroke();
+        if (isSearchMatch && _searchQuery) {
+            _ctx.globalAlpha = 1.0;
+            _ctx.beginPath();
+            _ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
+            _ctx.strokeStyle = 'rgba(245, 180, 25, 0.5)';
+            _ctx.lineWidth = 2;
+            _ctx.stroke();
+            _ctx.globalAlpha = searchOpacity;
+        }
 
         if (_zoomTransform.k > 0.5 && node.type !== 'honcho-conclusion') {
             _ctx.fillStyle = 'rgba(255,255,255,0.8)';
@@ -1421,6 +1539,7 @@ function _render() {
             _ctx.textAlign = 'center';
             _ctx.fillText(node.label || '', node.x, node.y + r + 12);
         }
+        _ctx.globalAlpha = 1.0;
     }
 
     if (_graphData.clusters && _zoomTransform.k > 0.3) {
@@ -1507,6 +1626,9 @@ function _renderStats() {
         text += ' | Goals: ' + visibleGoals + '/' + stats.goalCount;
     }
     text += ' | ' + _t('graph_stats_clusters', 'Clusters') + ': ' + stats.clusterCount;
+    if (_searchQuery && _graphData && _graphData.nodes) {
+        text += ' | Showing ' + _searchMatchIds.size + ' of ' + _graphData.nodes.length + ' nodes';
+    }
     el.textContent = text;
 }
 
@@ -1520,6 +1642,10 @@ window.addEventListener('resize', () => {
 
 // Init on load
 window.addEventListener('load', () => {
+    const searchInput = document.getElementById('searchBox');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => onSearchInput(e.target.value));
+    }
     loadMemoryGraph();
 });
 window.addEventListener('resize', () => {
