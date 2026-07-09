@@ -414,8 +414,26 @@ let _hiddenTypes = new Set();
 let _searchQuery = '';
 let _searchMatchIds = new Set();
 let _searchDebounceTimer = null;
+let _hoveredEdge = null;
 
 const FILTER_STORAGE_KEY = 'memory-graph-hidden-types';
+const EDGE_TYPE_LABELS = {
+    related_skills: 'Related Skills',
+    tag_overlap: 'Tag Overlap',
+    category: 'Category',
+    memory_reference: 'Memory Reference',
+    'honcho:references_skill': 'Honcho → Skill',
+    'honcho:references_memory': 'Honcho → Memory',
+    'honcho:observes': 'Honcho Observes',
+    'honcho:observed_by': 'Honcho Observed By',
+    wiki_link: 'Wiki Link',
+    wiki_references_skill: 'Wiki → Skill',
+    'journal:chain': 'Journal Chain',
+    'journal:references': 'Journal Reference',
+    'document:references_skill': 'Document → Skill',
+    'codebase:references_skill': 'Codebase → Skill',
+    'goals:references_skill': 'Goals → Skill'
+};
 const NODE_TYPE_CONFIG = [
     { type: 'skill', label: 'Skills', color: 'var(--color-skill)' },
     { type: 'memory', label: 'Memories', color: 'var(--color-memory)' },
@@ -452,6 +470,12 @@ function _resolveEdgeNode(endpoint) {
     if (!endpoint) return null;
     if (typeof endpoint === 'object') return endpoint;
     return _nodeMap.get(endpoint) || null;
+}
+
+function _setHoveredEdge(edge) {
+    if (_hoveredEdge === edge) return;
+    _hoveredEdge = edge;
+    _render();
 }
 
 function _buildFilterItems() {
@@ -667,6 +691,69 @@ function _findHaloAt(graphX, graphY) {
     return null;
 }
 
+function _findEdgeAt(graphX, graphY) {
+    if (!_graphData || !_graphData.edges) return null;
+    const threshold = 5 / _zoomTransform.k;
+    let bestEdge = null;
+    let bestDist = threshold;
+    const clusterGeoMap = new Map(_clusterGeometry().map(geo => [geo.cluster.id, geo]));
+    const drawnAggregated = new Set();
+
+    for (const edge of _graphData.edges) {
+        const source = _resolveEdgeNode(edge.source);
+        const target = _resolveEdgeNode(edge.target);
+        if (!source || !target || source.x == null || target.x == null) continue;
+        if (_hiddenTypes.has(source.type) || _hiddenTypes.has(target.type)) continue;
+
+        const sourceCollapsed = _collapsedClusters.has(source.clusterId);
+        const targetCollapsed = _collapsedClusters.has(target.clusterId);
+        if (sourceCollapsed && targetCollapsed && source.clusterId === target.clusterId) continue;
+        if (sourceCollapsed || targetCollapsed) {
+            const aggKey = [
+                sourceCollapsed ? 'c:' + source.clusterId : source.id,
+                targetCollapsed ? 'c:' + target.clusterId : target.id
+            ].sort().join('|');
+            if (drawnAggregated.has(aggKey)) continue;
+            drawnAggregated.add(aggKey);
+        }
+
+        let sx = source.x;
+        let sy = source.y;
+        let tx = target.x;
+        let ty = target.y;
+        if (sourceCollapsed) {
+            const geo = clusterGeoMap.get(source.clusterId);
+            if (geo) {
+                sx = geo.cx;
+                sy = geo.cy;
+            }
+        }
+        if (targetCollapsed) {
+            const geo = clusterGeoMap.get(target.clusterId);
+            if (geo) {
+                tx = geo.cx;
+                ty = geo.cy;
+            }
+        }
+
+        const dx = tx - sx;
+        const dy = ty - sy;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) continue;
+        let t = ((graphX - sx) * dx + (graphY - sy) * dy) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+        const projX = sx + t * dx;
+        const projY = sy + t * dy;
+        const dist = Math.hypot(graphX - projX, graphY - projY);
+        if (dist < bestDist) {
+            bestDist = dist;
+            bestEdge = edge;
+        }
+    }
+
+    return bestEdge;
+}
+
 function _toggleClusterCollapse(clusterId) {
     if (_collapsedClusters.has(clusterId)) {
         _collapsedClusters.delete(clusterId);
@@ -713,6 +800,7 @@ async function loadMemoryGraph(forceRefresh = false) {
         _hideGraphLoading();
         _hideGraphError();
         _collapsedClusters = new Set();
+        _hoveredEdge = null;
         _updateSearchMatches();
         _initSimulation();
         _startRenderLoop();
@@ -887,7 +975,10 @@ function _setupZoomAndDrag() {
             _mouseDownPos = { x: event.offsetX, y: event.offsetY };
         });
         _canvas.addEventListener('mousemove', _handleGraphMouseMove);
-        _canvas.addEventListener('mouseleave', _hideHoverCard);
+        _canvas.addEventListener('mouseleave', () => {
+            _hideHoverCard();
+            _setHoveredEdge(null);
+        });
         _canvas.addEventListener('click', _handleGraphClick);
         _canvas.addEventListener('dblclick', _handleGraphDblClick);
         document.addEventListener('keydown', (event) => {
@@ -1086,6 +1177,46 @@ function _hideHoverCard() {
     if (card) card.style.display = 'none';
 }
 
+function _showEdgeHoverCard(edge, mouseX, mouseY) {
+    const card = document.getElementById('graphHoverCard');
+    const container = document.getElementById('graphCanvasContainer');
+    if (!card || !container) return;
+
+    const source = _resolveEdgeNode(edge.source);
+    const target = _resolveEdgeNode(edge.target);
+    const typeLabel = EDGE_TYPE_LABELS[edge.type] || edge.type || 'Edge';
+    const sourceLabel = source ? (source.label || source.id) : '?';
+    const targetLabel = target ? (target.label || target.id) : '?';
+
+    card.innerHTML = '';
+    const title = document.createElement('div');
+    title.style.fontWeight = 'bold';
+    title.textContent = typeLabel;
+    card.appendChild(title);
+
+    const badge = document.createElement('div');
+    badge.className = 'badge';
+    badge.textContent = 'Weight: ' + (edge.weight == null ? '?' : edge.weight);
+    card.appendChild(badge);
+
+    const conn = document.createElement('div');
+    conn.className = 'conn';
+    conn.textContent = sourceLabel + ' → ' + targetLabel;
+    card.appendChild(conn);
+
+    card.style.display = 'block';
+    const containerRect = container.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    let left = mouseX + 15;
+    let top = mouseY + 15;
+    if (left + cardRect.width > containerRect.width) left = mouseX - cardRect.width - 15;
+    if (top + cardRect.height > containerRect.height) top = mouseY - cardRect.height - 15;
+    if (left < 0) left = 4;
+    if (top < 0) top = 4;
+    card.style.left = left + 'px';
+    card.style.top = top + 'px';
+}
+
 function _closeDetailPanel() {
     const panel = document.getElementById('graphDetailPanel');
     if (panel) panel.classList.remove('open');
@@ -1269,15 +1400,24 @@ function _showDetailPanel(node) {
 function _handleGraphMouseMove(event) {
     if (_isDragging || !_graphData) {
         _hideHoverCard();
+        _setHoveredEdge(null);
         return;
     }
     const pos = _screenToGraph(event.offsetX, event.offsetY);
     const node = _findNodeAt(pos.x, pos.y);
-    if (!node) {
-        _hideHoverCard();
+    if (node) {
+        _setHoveredEdge(null);
+        _showHoverCard(node, event.offsetX, event.offsetY);
         return;
     }
-    _showHoverCard(node, event.offsetX, event.offsetY);
+    const edge = _findEdgeAt(pos.x, pos.y);
+    if (edge) {
+        _setHoveredEdge(edge);
+        _showEdgeHoverCard(edge, event.offsetX, event.offsetY);
+    } else {
+        _setHoveredEdge(null);
+        _hideHoverCard();
+    }
 }
 
 function _navigateToNode(node) {
@@ -1437,7 +1577,13 @@ function _render() {
             _ctx.setLineDash([]);
             _ctx.lineWidth = edge.weight >= 3 ? 2 : 1;
         }
-        _ctx.globalAlpha = edgeOpacity;
+        if (_hoveredEdge === edge) {
+            _ctx.globalAlpha = 1.0;
+            _ctx.lineWidth = Math.max(_ctx.lineWidth, 2.5);
+            _ctx.strokeStyle = '#f5b419';
+        } else {
+            _ctx.globalAlpha = edgeOpacity;
+        }
         _ctx.stroke();
         _ctx.globalAlpha = 1.0;
     }
