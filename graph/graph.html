@@ -138,6 +138,13 @@
   #graphError { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: var(--surface); padding: 20px; border-radius: 8px; text-align: center; z-index: 30; display: none; flex-direction: column; gap: 12px; border: 1px solid var(--border); }
   #graphError button { background: var(--accent); border: none; color: var(--bg); padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; }
   #graphError button:hover { background: var(--accent-hover); }
+  #graphError .error-btn-row { display: flex; gap: 8px; justify-content: center; }
+  #graphError .error-dismiss { background: none; border: 1px solid var(--border); color: var(--text); }
+  #graphError .error-dismiss:hover { background: var(--accent-bg); }
+  #graphLoading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 30; display: none; flex-direction: column; align-items: center; gap: 14px; }
+  #graphLoading .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  #graphLoading .loading-text { color: var(--muted); font-size: 13px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   /* Detail Panel — right-docked sliding panel */
   #graphDetailPanel {
     position: absolute;
@@ -366,6 +373,10 @@
     <div style="margin-top:4px;color:var(--muted);opacity:0.7">Click halo: collapse/expand · Double-click label: zoom</div>
   </div>
   <div id="graphHoverCard"></div>
+  <div id="graphLoading">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading graph...</div>
+  </div>
   <div id="graphError"></div>
   <div id="graphDetailPanel">
     <div class="detail-header">
@@ -693,11 +704,13 @@ function _t(key, fallback) { return fallback; }
 
 async function loadMemoryGraph(forceRefresh = false) {
     const url = forceRefresh ? '/api/memory-graph?bust=1' : '/api/memory-graph';
+    _showGraphLoading();
     try {
         _closeDetailPanel();
         const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         _graphData = await res.json();
+        _hideGraphLoading();
         _hideGraphError();
         _collapsedClusters = new Set();
         _updateSearchMatches();
@@ -706,8 +719,20 @@ async function loadMemoryGraph(forceRefresh = false) {
         _renderStats();
         _buildFilterItems();
     } catch (e) {
+        _hideGraphLoading();
         _showGraphError(e.message);
     }
+}
+
+function _showGraphLoading() {
+    const el = document.getElementById('graphLoading');
+    if (el) el.style.display = 'flex';
+    _hideGraphError();
+}
+
+function _hideGraphLoading() {
+    const el = document.getElementById('graphLoading');
+    if (el) el.style.display = 'none';
 }
 
 function _showGraphError(msg) {
@@ -716,11 +741,19 @@ function _showGraphError(msg) {
     el.innerHTML = '';
     const text = document.createElement('div');
     text.textContent = _t('graph_error_loading', 'Failed to load graph data') + (msg ? ': ' + msg : '');
-    const btn = document.createElement('button');
-    btn.textContent = _t('graph_error_retry', 'Retry');
-    btn.onclick = () => loadMemoryGraph(true);
     el.appendChild(text);
-    el.appendChild(btn);
+    const btnRow = document.createElement('div');
+    btnRow.className = 'error-btn-row';
+    const retryBtn = document.createElement('button');
+    retryBtn.textContent = _t('graph_error_retry', 'Retry');
+    retryBtn.onclick = () => loadMemoryGraph(true);
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'error-dismiss';
+    dismissBtn.textContent = 'Dismiss';
+    dismissBtn.onclick = () => _hideGraphError();
+    btnRow.appendChild(retryBtn);
+    btnRow.appendChild(dismissBtn);
+    el.appendChild(btnRow);
     el.style.display = 'flex';
 }
 
