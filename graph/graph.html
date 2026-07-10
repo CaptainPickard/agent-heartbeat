@@ -80,7 +80,15 @@
   #graphCanvasContainer { position: absolute; top: 44px; left: 0; right: 0; bottom: 0; overflow: hidden; }
   #memoryGraphCanvas { display: block; width: 100%; height: 100%; cursor: grab; }
   #memoryGraphCanvas:active { cursor: grabbing; }
-  #graphStats { position: absolute; top: 8px; left: 8px; background: var(--surface-translucent); padding: 6px 12px; border-radius: 4px; font-size: 12px; color: var(--muted); z-index: 10; pointer-events: none; }
+  #graphStats { position: absolute; top: 8px; left: 8px; background: var(--surface-translucent); padding: 6px 12px; border-radius: 4px; font-size: 12px; color: var(--muted); z-index: 10; pointer-events: none; max-width: calc(100vw - 16px); }
+  #graphStats .stats-text { pointer-events: auto; cursor: pointer; display: inline; }
+  #graphStatsDetail { position: absolute; top: 32px; left: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; font-size: 11px; color: var(--muted); z-index: 11; display: none; max-width: 400px; line-height: 1.6; pointer-events: auto; box-shadow: 0 4px 12px var(--shadow); }
+  #graphStatsDetail.open { display: block; }
+  #graphStatsDetail .detail-row { display: flex; justify-content: space-between; gap: 12px; }
+  #graphStatsDetail .detail-row .detail-label { color: var(--muted); }
+  #graphStatsDetail .detail-row .detail-value { color: var(--text); font-weight: 600; }
+  #graphStatsDetail .detail-section { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-subtle); }
+  #graphStatsDetail .detail-title { font-weight: 600; color: var(--strong); margin-bottom: 4px; font-size: 12px; }
   #graphLegend { position: absolute; bottom: 8px; left: 8px; background: var(--surface-translucent); padding: 8px 12px; border-radius: 4px; font-size: 11px; color: var(--muted); z-index: 10; pointer-events: none; line-height: 1.6; }
   #graphLegend .legend-item { display: flex; align-items: center; gap: 6px; }
   #graphLegend .legend-shape { width: 12px; height: 12px; display: inline-block; }
@@ -359,6 +367,7 @@
 <div id="graphCanvasContainer">
   <canvas id="memoryGraphCanvas"></canvas>
   <div id="graphStats"></div>
+  <div id="graphStatsDetail"></div>
   <div id="graphLegend">
     <div class="legend-item"><span class="legend-shape" style="background:var(--color-skill);border-radius:50%"></span> Skills (colored by category cluster)</div>
     <div class="legend-item"><span class="legend-shape" style="background:var(--color-memory)"></span> Memories (colored by topic cluster)</div>
@@ -417,6 +426,7 @@ let _searchQuery = '';
 let _searchMatchIds = new Set();
 let _searchDebounceTimer = null;
 let _hoveredEdge = null;
+let _statsExpanded = false;
 
 const FILTER_STORAGE_KEY = 'memory-graph-hidden-types';
 const EDGE_FILTER_STORAGE_KEY = 'memory-graph-hidden-edge-types';
@@ -601,6 +611,18 @@ document.addEventListener('click', function(e) {
     if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
         dropdown.classList.remove('open');
         btn.classList.remove('active');
+    }
+});
+
+document.addEventListener('click', function(e) {
+    if (!_statsExpanded) return;
+    const stats = document.getElementById('graphStats');
+    const detail = document.getElementById('graphStatsDetail');
+    if (!stats || !detail) return;
+    if (!stats.contains(e.target) && !detail.contains(e.target)) {
+        _statsExpanded = false;
+        detail.classList.remove('open');
+        _renderStats();
     }
 });
 
@@ -1061,6 +1083,86 @@ function _setupZoomAndDrag() {
         });
         _eventsBound = true;
     }
+}
+
+function _toggleStatsExpanded() {
+    _statsExpanded = !_statsExpanded;
+    const detail = document.getElementById('graphStatsDetail');
+    if (detail) {
+        if (_statsExpanded) {
+            detail.classList.add('open');
+            _renderStatsDetail();
+        } else {
+            detail.classList.remove('open');
+        }
+    }
+    _renderStats();
+}
+
+function _renderStatsDetail() {
+    const detail = document.getElementById('graphStatsDetail');
+    if (!detail || !_graphData) return;
+    const nodes = _graphData.nodes || [];
+    const edges = _graphData.edges || [];
+    const clusters = _graphData.clusters || [];
+
+    const visibleNodes = nodes.filter(node => !_hiddenTypes.has(node.type));
+    const visibleEdges = edges.filter(edge => {
+        if (_hiddenEdgeTypes.has(edge.type)) return false;
+        const source = _resolveEdgeNode(edge.source);
+        const target = _resolveEdgeNode(edge.target);
+        if (!source || !target) return true;
+        return !_hiddenTypes.has(source.type) && !_hiddenTypes.has(target.type);
+    });
+
+    const edgeTypeCounts = {};
+    visibleEdges.forEach(edge => {
+        const label = EDGE_TYPE_LABELS[edge.type] || edge.type;
+        edgeTypeCounts[label] = (edgeTypeCounts[label] || 0) + 1;
+    });
+
+    let maxCluster = null;
+    let maxClusterSize = 0;
+    clusters.forEach(cluster => {
+        const visibleMembers = (cluster.nodeIds || []).filter(id => {
+            const node = _nodeMap.get(id);
+            return node && !_hiddenTypes.has(node.type);
+        });
+        if (visibleMembers.length > maxClusterSize) {
+            maxClusterSize = visibleMembers.length;
+            maxCluster = cluster;
+        }
+    });
+
+    const n = visibleNodes.length;
+    const maxPossibleEdges = n > 1 ? n * (n - 1) / 2 : 1;
+    const density = (visibleEdges.length / maxPossibleEdges * 100).toFixed(1);
+
+    let html = '<div class="detail-section"><div class="detail-title">Overview</div>';
+    html += '<div class="detail-row"><span class="detail-label">Total Nodes</span><span class="detail-value">' + nodes.length + '</span></div>';
+    html += '<div class="detail-row"><span class="detail-label">Visible Nodes</span><span class="detail-value">' + visibleNodes.length + '</span></div>';
+    html += '<div class="detail-row"><span class="detail-label">Total Edges</span><span class="detail-value">' + edges.length + '</span></div>';
+    html += '<div class="detail-row"><span class="detail-label">Visible Edges</span><span class="detail-value">' + visibleEdges.length + '</span></div>';
+    html += '<div class="detail-row"><span class="detail-label">Total Clusters</span><span class="detail-value">' + clusters.length + '</span></div>';
+    html += '<div class="detail-row"><span class="detail-label">Graph Density</span><span class="detail-value">' + density + '%</span></div>';
+    html += '</div>';
+
+    if (maxCluster) {
+        html += '<div class="detail-section"><div class="detail-title">Largest Cluster</div>';
+        html += '<div class="detail-row"><span class="detail-label">Name</span><span class="detail-value">' + (maxCluster.label || maxCluster.id) + '</span></div>';
+        html += '<div class="detail-row"><span class="detail-label">Visible Members</span><span class="detail-value">' + maxClusterSize + '</span></div>';
+        html += '</div>';
+    }
+
+    if (Object.keys(edgeTypeCounts).length > 0) {
+        html += '<div class="detail-section"><div class="detail-title">Edge Types</div>';
+        Object.entries(edgeTypeCounts).sort((a, b) => b[1] - a[1]).forEach(([type, count]) => {
+            html += '<div class="detail-row"><span class="detail-label">' + type + '</span><span class="detail-value">' + count + '</span></div>';
+        });
+        html += '</div>';
+    }
+
+    detail.innerHTML = html;
 }
 
 function _connectionCountFor(nodeId) {
@@ -1917,7 +2019,8 @@ function _renderStats() {
     if (_searchQuery && _graphData && _graphData.nodes) {
         text += ' | Showing ' + _searchMatchIds.size + ' of ' + _graphData.nodes.length + ' nodes';
     }
-    el.textContent = text;
+    el.innerHTML = '<span class="stats-text">' + text + (_statsExpanded ? '  ▾' : '  ▸') + '</span>';
+    if (_statsExpanded) _renderStatsDetail();
 }
 
 window.addEventListener('resize', () => {
@@ -1931,8 +2034,14 @@ window.addEventListener('resize', () => {
 // Init on load
 window.addEventListener('load', () => {
     const searchInput = document.getElementById('searchBox');
+    const statsEl = document.getElementById('graphStats');
     if (searchInput) {
         searchInput.addEventListener('input', (e) => onSearchInput(e.target.value));
+    }
+    if (statsEl) {
+        statsEl.addEventListener('click', function(e) {
+            if (e.target.classList.contains('stats-text')) _toggleStatsExpanded();
+        });
     }
     loadMemoryGraph();
 });
