@@ -1632,21 +1632,34 @@ function _handleGraphClick(event) {
 function _handleGraphDblClick(event) {
     if (!_graphData || !_zoomBehavior) return;
     const pos = _screenToGraph(event.offsetX, event.offsetY);
+    // Try node hit first for pin/unpin — use expanded radius for easier targeting
     const node = _findNodeAt(pos.x, pos.y);
-    if (node && !node._isMega) {
+    // Also try with an expanded hit area if the normal check missed
+    let pinNode = node;
+    if (!pinNode) {
+        // Expanded search: check nodes with 2x radius for pin targeting
+        for (let i = _graphData.nodes.length - 1; i >= 0; i--) {
+            const n = _graphData.nodes[i];
+            if (_collapsedClusters.has(n.clusterId)) continue;
+            if (_hiddenTypes.has(n.type)) continue;
+            const r = (n._radius || 5) * 2.5;
+            if (Math.hypot(n.x - pos.x, n.y - pos.y) <= r) { pinNode = n; break; }
+        }
+    }
+    if (pinNode && !pinNode._isMega) {
         event.preventDefault();
-        if (_pinnedNodeIds.has(node.id)) {
-            _pinnedNodeIds.delete(node.id);
-            node.fx = null;
-            node.fy = null;
+        if (_pinnedNodeIds.has(pinNode.id)) {
+            _pinnedNodeIds.delete(pinNode.id);
+            pinNode.fx = null;
+            pinNode.fy = null;
             _simulation.alphaTarget(0.3).restart();
             setTimeout(() => {
                 if (_simulation) _simulation.alphaTarget(0);
             }, 500);
         } else {
-            _pinnedNodeIds.add(node.id);
-            node.fx = node.x;
-            node.fy = node.y;
+            _pinnedNodeIds.add(pinNode.id);
+            pinNode.fx = pinNode.x;
+            pinNode.fy = pinNode.y;
         }
         _render();
         return;
