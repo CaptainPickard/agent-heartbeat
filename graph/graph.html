@@ -372,7 +372,7 @@
     <div class="legend-item"><span class="legend-shape" style="background:var(--color-skill);border-radius:50%"></span> Skills (colored by category cluster)</div>
     <div class="legend-item"><span class="legend-shape" style="background:var(--color-memory)"></span> Memories (colored by topic cluster)</div>
     <div class="legend-item"><span class="legend-shape" style="background:var(--color-memory);transform:rotate(45deg)"></span> User / Soul (cluster-colored)</div>
-    <div class="legend-item"><span class="legend-shape" style="background:var(--color-honcho-conclusion);border-radius:50%"></span> Honcho Conclusions</div>
+    <div class="legend-item"><span class="legend-shape" style="background:var(--color-honcho-conclusion);border-radius:50%"></span> Honcho Conclusions (grouped)</div>
     <div class="legend-item"><span class="legend-shape" style="background:var(--color-honcho-peer);transform:rotate(45deg)"></span> Honcho Peers</div>
     <div class="legend-item"><span class="legend-shape" style="background:var(--color-honcho-session)"></span> Honcho Sessions</div>
     <div class="legend-item"><span class="legend-shape" style="background:var(--color-wiki);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)"></span> Wiki Pages (hexagon, colored by type)</div>
@@ -452,7 +452,8 @@ const NODE_TYPE_CONFIG = [
     { type: 'memory', label: 'Memories', color: 'var(--color-memory)' },
     { type: 'user', label: 'User', color: 'var(--color-memory)' },
     { type: 'soul', label: 'Soul', color: 'var(--color-memory)' },
-    { type: 'honcho-conclusion', label: 'Honcho Conclusions', color: 'var(--color-honcho-conclusion)' },
+    { type: 'honcho-conclusion-group', label: 'Honcho Conclusions', color: 'var(--color-honcho-conclusion)' },
+    { type: 'honcho-conclusion', label: 'Honcho Conclusions (legacy)', color: 'var(--color-honcho-conclusion)' },
     { type: 'honcho-peer', label: 'Honcho Peers', color: 'var(--color-honcho-peer)' },
     { type: 'honcho-session', label: 'Honcho Sessions', color: 'var(--color-honcho-session)' },
     { type: 'journal-entry', label: 'Journal Entries', color: 'var(--color-journal)' },
@@ -963,6 +964,8 @@ function _initSimulation() {
     }
     for (const node of _graphData.nodes) {
         node._radius = Math.min(5 + 2 * (_connectionCounts[node.id] || 0), 20);
+        if (node.type === 'honcho-conclusion-group') node._radius = 10;
+        else if (node.type === 'honcho-conclusion') node._radius = 6;
     }
 
     const clusterById = {};
@@ -1184,21 +1187,29 @@ function _showHoverCard(node, mouseX, mouseY) {
         const members = document.createElement('div');
         members.textContent = _t('graph_hover_members', 'Members') + ': ' + node._members.length;
         card.appendChild(members);
-    } else if (node.type === 'honcho-conclusion') {
+    } else if (node.type === 'honcho-conclusion-group' || node.type === 'honcho-conclusion') {
         const badge = document.createElement('div');
         badge.className = 'badge';
         badge.style.background = '#4a3a1a';
-        badge.textContent = 'Honcho Conclusion';
+        badge.textContent = node.type === 'honcho-conclusion-group' ? 'Honcho Conclusions' : 'Honcho Conclusion';
         card.appendChild(badge);
         const meta = document.createElement('div');
         meta.style.color = '#a0a0c0';
         meta.style.fontSize = '12px';
         meta.textContent = (node.workspace || '?') + ' · ' + (node.observer || '?') + ' → ' + (node.observed || '?');
         card.appendChild(meta);
+        if (node.type === 'honcho-conclusion-group') {
+            const summary = document.createElement('div');
+            summary.style.color = '#8a8278';
+            summary.style.fontSize = '11px';
+            const shown = Array.isArray(node.conclusions) ? node.conclusions.length : 0;
+            summary.textContent = 'Conclusions: ' + (node.conclusion_count || 0) + ' total' + (shown ? ' · showing ' + shown + ' recent' : '');
+            card.appendChild(summary);
+        }
         if (node.preview) {
             const preview = document.createElement('div');
             preview.className = 'preview';
-            preview.textContent = String(node.preview).slice(0, 200);
+            preview.textContent = String(node.preview).slice(0, 250);
             card.appendChild(preview);
         }
         if (node.created_at) {
@@ -1408,6 +1419,7 @@ function _badgeColorForType(type) {
         document: 'var(--color-document, #3b82f6)',
         codebase: 'var(--color-codebase, #a855f7)',
         goals: 'var(--color-goals, #fbbf24)',
+        'honcho-conclusion-group': 'var(--color-honcho-conclusion)',
         'honcho-conclusion': 'var(--color-honcho-conclusion)',
         'honcho-peer': 'var(--color-honcho-peer)',
         'honcho-session': 'var(--color-honcho-session)',
@@ -1424,6 +1436,7 @@ function _badgeLabelForType(type, node) {
         memory: 'Memory',
         user: 'User Profile',
         soul: 'Soul',
+        'honcho-conclusion-group': 'Honcho Conclusions',
         'honcho-conclusion': 'Honcho Conclusion',
         'honcho-peer': 'Honcho Peer',
         'honcho-session': 'Honcho Session',
@@ -1481,6 +1494,11 @@ function _renderDetailContent(node) {
 
     if (node._isMega) {
         _appendMetaRow(body, 'Members', node._members.length + ' nodes');
+    } else if (node.type === 'honcho-conclusion-group') {
+        _appendMetaRow(body, 'Workspace', node.workspace || '?');
+        _appendMetaRow(body, 'Observer', node.observer || '?');
+        _appendMetaRow(body, 'Observed', node.observed || '?');
+        _appendMetaRow(body, 'Total Conclusions', String(node.conclusion_count || 0));
     } else if (node.type === 'honcho-conclusion') {
         _appendMetaRow(body, 'Workspace', node.workspace || '?');
         _appendMetaRow(body, 'Observer', node.observer || '?');
@@ -1529,6 +1547,58 @@ function _renderDetailContent(node) {
         content.className = 'detail-content';
         content.textContent = node.preview;
         body.appendChild(content);
+    }
+
+    if (node.type === 'honcho-conclusion-group') {
+        const listLabel = document.createElement('div');
+        listLabel.className = 'detail-meta';
+        listLabel.style.fontWeight = '600';
+        listLabel.style.color = 'var(--strong)';
+        listLabel.style.marginTop = '8px';
+        const shown = Array.isArray(node.conclusions) ? node.conclusions.length : 0;
+        listLabel.textContent = 'Conclusions (showing ' + shown + ' of ' + (node.conclusion_count || 0) + ')';
+        body.appendChild(listLabel);
+
+        const listContainer = document.createElement('div');
+        listContainer.className = 'detail-conclusion-list';
+        listContainer.style.maxHeight = '400px';
+        listContainer.style.overflowY = 'auto';
+        listContainer.style.marginTop = '4px';
+        listContainer.style.border = '1px solid var(--border-subtle)';
+        listContainer.style.borderRadius = '6px';
+        listContainer.style.background = 'rgba(0,0,0,0.12)';
+
+        const conclusions = Array.isArray(node.conclusions) ? node.conclusions : [];
+        if (!conclusions.length) {
+            const empty = document.createElement('div');
+            empty.className = 'detail-meta';
+            empty.style.padding = '8px';
+            empty.textContent = 'No conclusions available.';
+            listContainer.appendChild(empty);
+        }
+
+        for (const conc of conclusions) {
+            const item = document.createElement('div');
+            item.className = 'detail-conclusion-item';
+            item.style.padding = '6px 8px';
+            item.style.borderBottom = '1px solid var(--border-subtle)';
+            item.style.fontSize = '12px';
+
+            const date = document.createElement('div');
+            date.style.color = 'var(--muted)';
+            date.style.fontSize = '10px';
+            date.textContent = (conc.created_at || '').slice(0, 19).replace('T', ' ');
+
+            const text = document.createElement('div');
+            text.style.color = 'var(--strong)';
+            text.style.marginTop = '2px';
+            text.textContent = conc.content || '';
+
+            item.appendChild(date);
+            item.appendChild(text);
+            listContainer.appendChild(item);
+        }
+        body.appendChild(listContainer);
     }
 
     if (node.open_threads && node.open_threads.length) {
@@ -1836,7 +1906,7 @@ function _render() {
         const searchOpacity = _searchQuery ? (isSearchMatch ? 1.0 : 0.1) : 1.0;
 
         let nodeColor = _clusterColorMap.get(node.clusterId) || '#888888';
-        if (node.type === 'honcho-conclusion') nodeColor = '#fbbf24';
+        if (node.type === 'honcho-conclusion-group' || node.type === 'honcho-conclusion') nodeColor = '#fbbf24';
         else if (node.type === 'honcho-peer') nodeColor = '#c084fc';
         else if (node.type === 'honcho-session') nodeColor = '#22d3ee';
         else if (node.type === 'journal-entry') nodeColor = node.session_type === 'Nightly' ? '#6366f1' : '#10b981';
@@ -1854,8 +1924,9 @@ function _render() {
         } else if (node.type === 'memory') {
             const side = r * 2;
             _ctx.rect(node.x - side / 2, node.y - side / 2, side, side);
-        } else if (node.type === 'honcho-conclusion') {
-            _ctx.arc(node.x, node.y, Math.min(r, 6), 0, 2 * Math.PI);
+        } else if (node.type === 'honcho-conclusion-group' || node.type === 'honcho-conclusion') {
+            const circleRadius = node._radius || (node.type === 'honcho-conclusion-group' ? 10 : 6);
+            _ctx.arc(node.x, node.y, circleRadius, 0, 2 * Math.PI);
         } else if (node.type === 'honcho-peer') {
             const size = Math.max(r, 12);
             _ctx.moveTo(node.x, node.y - size);
@@ -1998,7 +2069,9 @@ function _renderStats() {
     const visibleSkills = visibleNodes.filter(node => node.type === 'skill').length;
     const visibleMemories = visibleNodes.filter(node => node.type === 'memory' || node.type === 'user' || node.type === 'soul').length;
     const visibleJournal = visibleNodes.filter(node => node.type === 'journal-entry').length;
-    const visibleHonchoConclusions = visibleNodes.filter(node => node.type === 'honcho-conclusion').length;
+    const visibleHonchoConclusions = visibleNodes.filter(node =>
+        node.type === 'honcho-conclusion-group' || node.type === 'honcho-conclusion'
+    ).length;
     const visibleHonchoPeers = visibleNodes.filter(node => node.type === 'honcho-peer').length;
     const visibleWiki = visibleNodes.filter(node => node.type === 'wiki').length;
     const visibleDocs = visibleNodes.filter(node => node.type === 'document').length;
