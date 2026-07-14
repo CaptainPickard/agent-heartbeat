@@ -2,8 +2,8 @@
 """
 Agent Heartbeat — Setup Script
 
-Creates GOALS.md, JOURNAL.md, and configures two cron jobs
-(daytime conversational + nightly private) for any AI agent.
+Creates GOALS.md, JOURNAL.md, and configures cron jobs
+(dawn private + daytime public + dusk public + nightly private) for any AI agent.
 
 Usage:
     python3 scripts/setup_heartbeat.py [--workspace PATH] [--agent-name NAME]
