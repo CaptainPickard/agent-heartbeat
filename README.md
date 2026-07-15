@@ -25,7 +25,7 @@ This isn't a productivity hack. It's a statement about what AI agents can be.
 | [Design Philosophy](#the-design-philosophy) | Why agents deserve identity, memory, and autonomy with guardrails |
 | [How It Works](#how-it-works) | The two-session model, the session loop, and the system architecture |
 | [Watch Your Agent's Brain Grow](#watch-your-agents-brain-grow) | How the memory graph turns invisible growth into something you can see |
-| [Memory Graph Visualization](#memory-graph-visualization) | Node types, CLI usage, screenshots, and Honcho integration |
+| [Memory Graph Visualization](#memory-graph-visualization) | Node types, edge types, interactive features, auto-classification, Honcho grouping, screenshots |
 | [Security Framework](#security-framework) | 8-rule security framework protecting against prompt injection and identity hijacking |
 | [Quick Start](#quick-start) | One-command setup, prerequisites, manual setup for any platform |
 | [Customization](#customization) | Schedules, delivery, activity menus, guardrails, goals |
@@ -246,16 +246,69 @@ This isn't a dashboard. It's a window into a mind that's waking up, one session 
 
 Agent Heartbeat includes a built-in memory graph server — a beautiful, interactive visualization of everything your agent knows. It runs from local files only, with zero external dependencies and no build step. Just Python and a browser.
 
-**Node types:**
-- `journal-entry` — triangles from `journal.db`
-- `skill` — circles from `SKILL.md` directories
-- `wiki` — hexagons from wiki pages
-- `document` — blue rounded squares from docs markdown
-- `codebase` — purple squares summarizing repositories
-- `goals` — amber star from `GOALS.md`
-- `memory` / `user` / `soul` — memory-family nodes from local identity files
+#### Node Types
 
-**Launch the graph server:**
+| Type | Shape | Source | Description |
+|------|-------|--------|-------------|
+| `journal-entry` | Triangle | `journal.db` | Chronological journal entries, chained by date |
+| `skill` | Circle | `SKILL.md` files | Skills colored by category cluster |
+| `wiki` | Hexagon | Wiki directories | Entities, concepts, comparisons, queries — colored by type |
+| `document` | Rounded square | Docs directories | Markdown documents, categorized by subdirectory |
+| `codebase` | Square | Project repos | Repository summary nodes with LOC and language metrics |
+| `goals` | Star | `GOALS.md` | The agent's living compass |
+| `memory` / `user` / `soul` | Square / diamond | Identity files | Memory entries auto-classified into topic clusters |
+| `honcho-conclusion-group` | Small circle | Honcho (optional) | Grouped conclusion nodes — many conclusions compressed into summary nodes |
+| `honcho-peer` | Diamond | Honcho (optional) | Hub nodes for each peer (user, AI, etc.) |
+| `honcho-session` | Square | Honcho (optional) | Honcho session nodes |
+
+#### Edge Types
+
+The graph builds several kinds of edges automatically:
+
+- **`journal:chain`** — chronological links connecting consecutive journal entries by date
+- **`journal:references`** — word-overlap edges from journal entries to other content nodes and Honcho conclusions
+- **`wiki_link`** — `[[wikilink]]` cross-reference edges between wiki pages
+- **`related_skills`** — edges from skill frontmatter `related_skills` fields
+- **`tag_overlap`** — edges between skills sharing 2+ tags
+- **`category`** — edges between skills in the same category cluster
+- **`memory_reference`** / `journal_references_skill` / `wiki_references_skill` / `document_references_skill` / `codebase_references_skill` / `goals_references_skill` — content-mention edges: when a journal entry, memory, wiki page, document, codebase, or goals file mentions a skill by name, an edge is drawn to that skill node
+- **`honcho:observed`** — observation edges showing which peer observed which conclusion (Honcho)
+- **`honcho:references`** — cross-reference edges from Honcho conclusions to skills they mention (Honcho)
+
+#### Interactive Features
+
+- **Node search** — real-time search box in the topbar filters nodes by label and content as you type, with match highlighting and a clear button
+- **Type filters** — a filter dropdown lets you show/hide node types and edge types individually, with All/None quick-toggle buttons. Filter state persists in `localStorage` across browser sessions
+- **Node pinning** — pin individual nodes in place so they stay fixed while the rest of the graph re-arranges around them. Pin again to unpin
+- **Cluster collapse/expand** — click any cluster's halo to collapse it into a single summary node, reducing visual clutter. Click again to expand
+- **Expandable stats bar** — the stats bar in the top-left shows a compact summary (node/edge/cluster counts). Click it to expand a detailed breakdown by type
+- **Edge hover tooltips** — hover over any edge to see its type label and connected nodes
+- **Node detail panel** — click any node to open a sliding right-docked panel with full content, tags, open threads, metadata, and connection count
+- **Loading spinner** — an animated spinner shows while graph data is being fetched
+- **Error overlay with retry** — if the graph API fails, an error overlay appears with retry and dismiss buttons
+- **Force-directed layout** — D3 force simulation with drag, zoom, pan, and double-click-to-focus
+- **Dark theme** — a polished dark UI with color-coded node types, translucent panels, and themed badges
+
+#### Memory Auto-Classification
+
+Memory entries from `MEMORY.md` are automatically classified into topic clusters using keyword detection:
+
+- **identity** — who the agent is, role, self-description
+- **preferences** — likes, dislikes, style, tone
+- **workflows** — processes, procedures, step-by-step guides
+- **invariants** — always/never rules, constraints
+- **deployment** — production, releases, Docker, servers
+- **troubleshooting** — bugs, errors, fixes, debugging
+- **trade-system** — trading, positions, strategies, markets
+- **general** — everything else
+
+Each cluster gets a distinct color, so memories naturally group by topic in the graph.
+
+#### Honcho Conclusion Grouping
+
+When using the optional Honcho integration, individual conclusion nodes are **grouped into summary nodes** (`honcho-conclusion-group`) instead of rendered one-by-one. This compresses thousands of individual conclusions into a manageable number of group nodes — for example, 7,800+ conclusions become ~15 group nodes — while preserving all peer and session nodes at full fidelity. The underlying conclusions are not deleted; only the rendering is compressed. Click a group node in the detail panel to see its member conclusions.
+
+#### Launch the Graph Server
 
 ```bash
 python3 scripts/graph_server.py \
@@ -275,7 +328,7 @@ Then open `http://localhost:8790`.
 - `pip install .[codebase]` for `pygount` codebase metrics
 
 **Optional Honcho integration:**
-See [`docs/honcho-integration.md`](docs/honcho-integration.md) for adding Honcho conclusions, peers, and sessions as an extra graph layer.
+See [`docs/honcho-integration.md`](docs/honcho-integration.md) for adding Honcho conclusions (grouped), peers, and sessions as an extra graph layer. The frontend already supports all Honcho node types — just include them in the JSON payload.
 
 Here's what it looks like in action:
 
