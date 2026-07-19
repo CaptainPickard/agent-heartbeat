@@ -6,6 +6,11 @@ from pathlib import Path
 
 CLI = str(Path(__file__).resolve().parent.parent / "scripts" / "journal_cli.py")
 
+# Import the pure function for unit tests. The repo layout makes `scripts`
+# importable (see tests/test_journal_store.py which does `from scripts import ...`).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts.journal_cli import _parse_threads  # noqa: E402
+
 
 def _run_cli(db_path: str, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -28,7 +33,7 @@ def _seed(db_path: str) -> int:
         "--what-i-did", "Ran a CLI test.",
         "--what-i-found", "It works.",
         "--what-im-thinking", "Good enough.",
-        "--open-threads", "test thread alpha,test thread beta",
+        "--open-threads", "test thread alpha\ntest thread beta",
         "--room-status", "Clean.",
     )
     assert result.returncode == 0, f"add failed: {result.stderr}"
@@ -139,3 +144,21 @@ def test_cli_export_latest_regenerates_md(tmp_path):
     content = md_path.read_text()
     assert "## Latest Entry" in content
     assert "CLI Test Entry" in content
+
+
+def test_parse_threads_keeps_comma_in_thread():
+    """A single thread containing a comma parses as one thread, not two."""
+    assert _parse_threads("one thread, with a comma") == ["one thread, with a comma"]
+
+
+def test_parse_threads_splits_on_newline():
+    assert _parse_threads("thread one\nthread two") == ["thread one", "thread two"]
+
+
+def test_parse_threads_drops_empty_lines():
+    assert _parse_threads("a\n\n\nb\n") == ["a", "b"]
+
+
+def test_parse_threads_regression_comma_no_longer_splits():
+    # Pre-2026-07-19 this parsed as two threads; the comma delimiter was a bug.
+    assert _parse_threads("alpha,beta") == ["alpha,beta"]

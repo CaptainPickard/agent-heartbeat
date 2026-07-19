@@ -362,3 +362,27 @@ def test_get_entry_by_id_returns_the_entry(seeded_db):
 def test_get_entry_by_id_returns_none_for_missing(seeded_db):
     db_path, _, _ = seeded_db
     assert get_entry_by_id(db_path, 999999) is None
+
+
+def test_add_entry_stores_comma_thread_as_single_row(db_path):
+    """A thread text containing a comma is stored as exactly one row, not split."""
+    init_db(db_path)
+    add_entry(
+        db_path=db_path,
+        date="2026-07-19",
+        session_type="Daytime",
+        title="Comma thread test",
+        what_i_did="x",
+        what_i_found="y",
+        what_im_thinking="z",
+        open_threads=["a thread, with a comma"],
+        room_status="Clean.",
+    )
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute(
+        "SELECT thread_text FROM open_threads WHERE status='open'"
+    ).fetchall()
+    conn.close()
+    assert len(rows) == 1
+    assert rows[0][0] == "a thread, with a comma"

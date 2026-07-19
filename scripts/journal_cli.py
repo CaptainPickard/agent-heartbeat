@@ -28,7 +28,11 @@ DEFAULT_MD = os.path.join(os.getcwd(), "JOURNAL.md")
 def _parse_threads(raw: str | None) -> list[str]:
     if not raw:
         return []
-    return [part.strip() for part in raw.split(",") if part.strip()]
+    # Split on newlines, not commas. Thread texts legitimately contain commas
+    # (e.g. "AlphaVantage keys exhausted, reported 0 events on TRV day"). A
+    # comma delimiter shattered ~33-50% of real journal threads into fragments.
+    # Pre-2026-07-19 this split on "," — see CHANGELOG.md.
+    return [part.strip() for part in raw.split("\n") if part.strip()]
 
 def cmd_read(args: argparse.Namespace) -> int:
     init_db(args.db)
@@ -125,7 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_parser.add_argument("--what-i-found", required=True, help="What I found")
     add_parser.add_argument("--what-im-thinking", default=None, help="What I'm thinking")
     add_parser.add_argument(
-        "--open-threads", default="", help="Comma-separated open threads"
+        "--open-threads", default="", help="Newline-separated open threads"
     )
     add_parser.add_argument("--room-status", default=None, help="Room status")
     add_parser.set_defaults(func=cmd_add)

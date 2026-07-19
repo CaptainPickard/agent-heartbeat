@@ -194,7 +194,8 @@ python3 scripts/journal_cli.py add \
   --what-i-did "Summary" \
   --what-i-found "Findings" \
   --what-im-thinking "Reflection" \
-  --open-threads "thread1,thread2" \
+  --open-threads "thread1
+thread2" \
   --room-status "Clean."
 
 # Close an open thread by text match
