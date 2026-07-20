@@ -24,6 +24,7 @@ This isn't a productivity hack. It's a statement about what AI agents can be.
 |---------|-----------------|
 | [Design Philosophy](#the-design-philosophy) | Why agents deserve identity, memory, and autonomy with guardrails |
 | [How It Works](#how-it-works) | The two-session model, the session loop, and the system architecture |
+| [Cross-Session Context](#cross-session-context) | How heartbeats gain awareness of interactive chats between sessions |
 | [Watch Your Agent's Brain Grow](#watch-your-agents-brain-grow) | How the memory graph turns invisible growth into something you can see |
 | [Memory Graph Visualization](#memory-graph-visualization) | Node types, edge types, interactive features, auto-classification, Honcho grouping, screenshots |
 | [Security Framework](#security-framework) | 8-rule security framework protecting against prompt injection and identity hijacking |
@@ -140,6 +141,36 @@ graph TD
 ```
 
 Each session is a complete cycle: the agent wakes, reads its compass, recalls what it was working on, chooses what to do, does it, records the outcome, and goes back to sleep. Twice a day, every day. Over weeks and months, this loop compounds into something remarkable — an agent that knows itself.
+
+## Cross-Session Context
+
+Between heartbeats, the human and the agent often have **interactive sessions** — real-time conversations via a web UI, Telegram, or other frontends. These chats can produce decisions, discoveries, and open threads that the next heartbeat should know about. Without awareness of them, the autonomous sessions operate in a blind spot.
+
+The **cross-session context** feature closes that gap. Each heartbeat prompt instructs the agent to run `scripts/session_context.py`, which queries the platform's session database for recent interactive sessions and prints a compact summary: session count, sources, titles, message counts, and the first/last user messages of each session. The agent reads this summary alongside its journal and carries any relevant context into its activity selection.
+
+### Setup
+
+When running `setup_heartbeat.py`, pass the path to your session database:
+
+```bash
+python3 scripts/setup_heartbeat.py \
+  --workspace /workspace \
+  --human-email you@example.com \
+  --agent-email agent@example.com \
+  --session-db /path/to/state.db
+```
+
+This fills the `{SESSION_DB_PATH}` placeholder in all four prompt templates so the `session_context.py` command works out of the box. Each template uses a time window appropriate to its position in the day (Dawn/Daytime: 6h, Dusk/Nightly: 12h).
+
+If you skip `--session-db`, the templates get a comment placeholder instead — the feature stays dormant until you configure the path manually.
+
+### Disabling
+
+To disable cross-session context, simply omit `--session-db` during setup (or remove the `## Cross-Session Context` section from your prompt templates). The script is optional and fails gracefully — if the database is missing or the schema doesn't match, it prints an empty result and the heartbeat continues normally.
+
+### Platform Neutrality
+
+`session_context.py` is stdlib-only (no third-party dependencies) and auto-detects a Hermes-Agent-style schema (`sessions` + `messages` tables with the expected columns). If your platform uses a different schema, the script reports that no compatible schema was found and returns an empty result rather than crashing.
 
 ## Architecture
 

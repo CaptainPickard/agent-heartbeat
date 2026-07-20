@@ -71,6 +71,10 @@ def main():
     parser.add_argument("--day-schedule", default="0 18 * * *", help="Cron schedule for daytime session (UTC)")
     parser.add_argument("--night-schedule", default="0 9 * * *", help="Cron schedule for nightly session (UTC)")
     parser.add_argument("--skip-cron", action="store_true", help="Skip cron job creation (files only)")
+    parser.add_argument("--session-db", default="",
+                        help="Path to the platform's session database (e.g. state.db). "
+                             "When set, enables cross-session context in prompt templates. "
+                             "When empty, templates get a placeholder comment instead.")
     args = parser.parse_args()
 
     workspace = Path(args.workspace).resolve()
@@ -83,6 +87,13 @@ def main():
     print()
 
     # Replacements for templates
+    # SESSION_DB_PATH: when --session-db is provided, embed the real path so the
+    # cross-session context command in the templates works out of the box. When
+    # empty, leave a comment so the human knows to configure it manually.
+    session_db_replacement = (
+        args.session_db if args.session_db
+        else "# configure your session database path here (e.g. /path/to/state.db)"
+    )
     replacements = {
         "AGENT_NAME": args.agent_name,
         "AGENT_DESCRIPTION": args.agent_description,
@@ -94,6 +105,7 @@ def main():
         "DATE": date_now,
         "DAY_TIME": args.day_schedule,
         "NIGHT_TIME": args.night_schedule,
+        "SESSION_DB_PATH": session_db_replacement,
     }
 
     # 1. Create GOALS.md
