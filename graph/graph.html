@@ -1078,15 +1078,16 @@ function _initSimulation() {
     const chargeStrength = nodeCount > 500 ? -60 : -30;
     const alphaDecay = nodeCount > 500 ? 0.015 : 0.025;
 
-    // Filter edges for the link force: drop edges where BOTH endpoints are
-    // conclusions (conclusions aren't in the sim). Edges with one structural
-    // endpoint (peer→anchor, journal→conclusion, conclusion→skill) are kept
-    // — D3 will resolve the structural endpoint and the conclusion position
-    // is computed each frame by _layoutConclusions().
+    // Filter edges for the link force: drop ANY edge that references a
+    // conclusion node (conclusions aren't in the sim, so D3's forceLink
+    // would throw "node not found" trying to resolve them). Only edges
+    // between structural nodes (peers, sessions, skills, memories, journal,
+    // wiki, docs, anchors) belong in the link force.
     const simEdges = _graphData.edges.filter(e => {
         const s = _nodeMap.get(e.source);
         const t = _nodeMap.get(e.target);
-        if (s && t && s._isConclusion && t._isConclusion) return false;
+        if (s && s._isConclusion) return false;
+        if (t && t._isConclusion) return false;
         return true;
     });
 
