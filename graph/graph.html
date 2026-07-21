@@ -1104,30 +1104,32 @@ function _initSimulation() {
 
     _simulation = d3.forceSimulation(_structuralNodes)
         .force('charge', d3.forceManyBody().strength(d => {
-            // Anchor nodes repel more strongly to keep clusters apart
-            if (d._isAnchor) return chargeStrength * 3;
+            // Anchors repel moderately to prevent overlap but not fly apart.
+            // Base charge is mild so the graph stays compact.
+            if (d._isAnchor) return chargeStrength * 1.5;
             return chargeStrength;
         }))
         .force('link', d3.forceLink(simEdges).id(d => d.id).distance(link => {
-            // Longer links for anchor edges so clouds have room
+            // Moderate link distance for anchor edges — enough room for
+            // the cloud but not so far that peers disconnect visually.
             const s = typeof link.source === 'object' ? link.source : _nodeMap.get(link.source);
             const t = typeof link.target === 'object' ? link.target : _nodeMap.get(link.target);
-            if ((s && s._isAnchor) || (t && t._isAnchor)) return 80;
-            return 35;
+            if ((s && s._isAnchor) || (t && t._isAnchor)) return 50;
+            return 30;
         }).strength(link => {
-            return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.5 : 0.15;
+            // Stronger links pull connected nodes together more tightly.
+            return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.7 : 0.2;
         }))
-        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2))
+        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2).strength(0.08))
         .force('collide', d3.forceCollide().radius(d => {
-            // Anchor nodes collide with their full disk radius to prevent
-            // conclusion clouds from overlapping. Journal entry nodes get
-            // extra space too. Other nodes use small radius.
+            // Anchor collision uses disk radius but with a compactness
+            // factor — we want overlap prevention, not maximum spread.
             const diskR = _anchorDiskRadius(d);
-            if (diskR > 0) return diskR;
-            if (d.type === 'journal-entry') return 18;
+            if (diskR > 0) return diskR * 0.75; // 75% of disk = snug but not overlapping
+            if (d.type === 'journal-entry') return 14;
             return (d._radius || 5) + 2;
         }))
-        .force('cluster', forceClusterGravity(0.15))
+        .force('cluster', forceClusterGravity(0.3))
         .alphaDecay(alphaDecay);
 
     // All clusters expanded by default — no auto-collapse
