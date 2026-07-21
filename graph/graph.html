@@ -2104,7 +2104,7 @@ function _render() {
             return;
         }
         // Larger halo for journal and honcho conclusion clusters to reduce overlap
-        const haloPad = cluster.id.startsWith('journal') ? 35 : (cluster.id.startsWith('honcho-conclusion') ? 30 : 20);
+        const haloPad = geo.cluster.id.startsWith('journal') ? 35 : (geo.cluster.id.startsWith('honcho-conclusion') ? 30 : 20);
         _ctx.fillStyle = geo.cluster.color + '0D';
         _ctx.beginPath();
         _ctx.arc(geo.cx, geo.cy, geo.maxDist + haloPad, 0, 2 * Math.PI);
