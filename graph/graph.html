@@ -428,6 +428,17 @@ let _searchDebounceTimer = null;
 let _hoveredEdge = null;
 let _statsExpanded = false;
 
+// ── Hybrid layout: conclusion nodes are positioned geometrically ──────────
+// Individual conclusion nodes are flagged with ``_isConclusion`` by the
+// backend. They are NEVER added to the D3 force simulation — instead
+// ``_layoutConclusions()`` computes their positions every frame via a
+// phyllotaxis (sunflower seed) distribution around their anchor node.
+// Anchor nodes (``_isAnchor``) ARE in the force simulation.
+let _conclusionNodes = [];
+let _structuralNodes = [];
+const GOLDEN_ANGLE = 2.39996; // 137.5° in radians
+const CONCLUSION_SPACING = 3.5; // phyllotaxis radius constant
+
 const FILTER_STORAGE_KEY = 'memory-graph-hidden-types';
 const EDGE_FILTER_STORAGE_KEY = 'memory-graph-hidden-edge-types';
 const EDGE_TYPE_LABELS = {
@@ -453,7 +464,8 @@ const NODE_TYPE_CONFIG = [
     { type: 'user', label: 'User', color: 'var(--color-memory)' },
     { type: 'soul', label: 'Soul', color: 'var(--color-memory)' },
     { type: 'honcho-conclusion-group', label: 'Honcho Conclusions', color: 'var(--color-honcho-conclusion)' },
-    { type: 'honcho-conclusion', label: 'Honcho Conclusions (legacy)', color: 'var(--color-honcho-conclusion)' },
+    { type: 'honcho-conclusion', label: 'Honcho Conclusions (individual)', color: 'var(--color-honcho-conclusion)' },
+    { type: 'honcho-conclusion-anchor', label: 'Honcho Conclusion Anchors', color: 'var(--color-honcho-conclusion)' },
     { type: 'honcho-peer', label: 'Honcho Peers', color: 'var(--color-honcho-peer)' },
     { type: 'honcho-session', label: 'Honcho Sessions', color: 'var(--color-honcho-session)' },
     { type: 'journal-entry', label: 'Journal Entries', color: 'var(--color-journal)' },
@@ -657,13 +669,22 @@ function _nodeMatchesSearch(node) {
             if (typeof tag === 'string' && tag.toLowerCase().includes(q)) return true;
         }
     }
+    // Conclusions carry observer/observed peer names — let searching
+    // observer name highlight that peer's conclusions.
+    if (node.observer && typeof node.observer === 'string' && node.observer.toLowerCase().includes(q)) return true;
+    if (node.observed && typeof node.observed === 'string' && node.observed.toLowerCase().includes(q)) return true;
     return false;
 }
 
 function _updateSearchMatches() {
     _searchMatchIds.clear();
     if (!_searchQuery || !_graphData) return;
-    _graphData.nodes.forEach(node => {
+    // Search over ALL nodes — structural (in _graphData.nodes / _structuralNodes)
+    // AND individual conclusions (in _conclusionNodes).
+    const all = _structuralNodes.length || _conclusionNodes.length
+        ? _structuralNodes.concat(_conclusionNodes)
+        : (_graphData.nodes || []);
+    all.forEach(node => {
         if (_nodeMatchesSearch(node)) _searchMatchIds.add(node.id);
     });
 }
@@ -716,9 +737,30 @@ function _clusterGeometry() {
     _graphData.clusters.forEach(cluster => {
         const members = cluster.nodeIds.map(id => _nodeMap.get(id)).filter(n => n && n.x != null && !_hiddenTypes.has(n.type));
         if (!members.length) return;
-        const cx = members.reduce((s, n) => s + n.x, 0) / members.length;
-        const cy = members.reduce((s, n) => s + n.y, 0) / members.length;
-        const maxDist = Math.max(...members.map(n => Math.hypot(n.x - cx, n.y - cy)));
+
+        // For Honcho conclusion clusters in individual mode, the anchor
+        // node is the true centroid (conclusions are positioned around it
+        // via phyllotaxis). The backend only puts the anchor node id in
+        // ``cluster.nodeIds`` for these clusters (conclusions are omitted
+        // to avoid payload bloat), so ``members`` here is just the anchor.
+        // Use the anchor position as centroid and compute the phyllotaxis
+        // disk radius as the halo size.
+        const anchorNode = members.find(m => m._isAnchor);
+        let cx, cy, maxDist;
+        if (anchorNode) {
+            cx = anchorNode.x;
+            cy = anchorNode.y;
+            // Phyllotaxis disk radius: SPACING * sqrt(N) gives the radius
+            // of the outermost conclusion. Add a small padding.
+            const concCount = anchorNode.conclusion_count || 0;
+            const renderedCount = _conclusionNodes.filter(c => c.clusterId === cluster.id).length;
+            const n = Math.max(renderedCount, concCount, members.length);
+            maxDist = n > 0 ? CONCLUSION_SPACING * Math.sqrt(n) + 8 : (members.length > 1 ? Math.max(...members.map(mnd => Math.hypot(mnd.x - cx, mnd.y - cy))) : 10);
+        } else {
+            cx = members.reduce((s, n) => s + n.x, 0) / members.length;
+            cy = members.reduce((s, n) => s + n.y, 0) / members.length;
+            maxDist = Math.max(...members.map(n => Math.hypot(n.x - cx, n.y - cy)));
+        }
         result.push({ cluster, members, cx, cy, maxDist });
     });
     return result;
@@ -747,12 +789,26 @@ function _findNodeAt(graphX, graphY) {
             };
         }
     }
-    for (let i = _graphData.nodes.length - 1; i >= 0; i--) {
-        const n = _graphData.nodes[i];
+    // Structural nodes — always hit-testable
+    for (let i = _structuralNodes.length - 1; i >= 0; i--) {
+        const n = _structuralNodes[i];
         if (_collapsedClusters.has(n.clusterId)) continue;
         if (_hiddenTypes.has(n.type)) continue;
         const r = n._radius || 5;
         if (Math.hypot(n.x - graphX, n.y - graphY) <= r) return n;
+    }
+    // Conclusion nodes — only hit-testable at close zoom (k >= 1.0).
+    // At low zoom clicking the conclusion cloud hits the cluster halo
+    // instead (existing behaviour) which collapses/expands.
+    if (_zoomTransform.k >= 1.0 && _conclusionNodes && _conclusionNodes.length) {
+        for (let i = _conclusionNodes.length - 1; i >= 0; i--) {
+            const c = _conclusionNodes[i];
+            if (_collapsedClusters.has(c.clusterId)) continue;
+            if (_hiddenTypes.has(c.type)) continue;
+            // Slightly larger hit radius (4px) than visual (3px) for
+            // easier targeting at close zoom.
+            if (Math.hypot(c.x - graphX, c.y - graphY) <= 4) return c;
+        }
     }
     return null;
 }
@@ -893,6 +949,23 @@ async function loadMemoryGraph(forceRefresh = false) {
         _collapsedClusters = new Set();
         _pinnedNodeIds.clear();
         _hoveredEdge = null;
+
+        // ── Hybrid layout node split (Task 9/3) ───────────────────────────
+        // Individual conclusion nodes are flagged ``_isConclusion`` by the
+        // backend. They are positioned geometrically (phyllotaxis) and never
+        // enter the D3 force simulation. Anchor nodes (``_isAnchor``) ARE
+        // structural and stay in the simulation.
+        const allNodes = _graphData.nodes || [];
+        _conclusionNodes = allNodes.filter(n => n._isConclusion === true);
+        _structuralNodes = allNodes.filter(n => n._isConclusion !== true);
+        // Build nodeMap with ALL nodes (structural + conclusions + anchors)
+        // so edge resolution works for cross-layer conclusion edges.
+        _nodeMap = new Map();
+        allNodes.forEach(n => _nodeMap.set(n.id, n));
+        // _graphData.nodes now refers to structural-only for the simulation
+        // and existing code that iterates structural nodes.
+        _graphData.nodes = _structuralNodes;
+
         _updateSearchMatches();
         _initSimulation();
         _startRenderLoop();
@@ -957,22 +1030,38 @@ function _initSimulation() {
     _ctx = _canvas.getContext('2d');
     _resizeCanvas();
 
+    // Connection counts must be computed over ALL edges (including
+    // conclusion cross-layer edges) so anchor nodes get proper sizing
+    // even though conclusions are not in the simulation.
     _connectionCounts = {};
     for (const edge of _graphData.edges) {
         _connectionCounts[edge.source] = (_connectionCounts[edge.source] || 0) + 1;
         _connectionCounts[edge.target] = (_connectionCounts[edge.target] || 0) + 1;
     }
-    for (const node of _graphData.nodes) {
+    for (const node of _structuralNodes) {
         node._radius = Math.min(5 + 2 * (_connectionCounts[node.id] || 0), 20);
         if (node.type === 'honcho-conclusion-group') node._radius = 10;
+        else if (node.type === 'honcho-conclusion-anchor') node._radius = 4; // faint anchor dot
         else if (node.type === 'honcho-conclusion') node._radius = 6;
+    }
+    // Individual conclusion nodes get a fixed small radius; they're
+    // rendered as LOD dots, not force-simulated circles.
+    for (const c of _conclusionNodes) {
+        c._radius = 3;
     }
 
     const clusterById = {};
-    for (const node of _graphData.nodes) clusterById[node.id] = node.clusterId;
+    for (const node of _structuralNodes) clusterById[node.id] = node.clusterId;
+    // Also map conclusion cluster IDs (for edge strength calc) — conclusions
+    // share the same clusterId as their anchor.
+    for (const c of _conclusionNodes) clusterById[c.id] = c.clusterId;
 
-    _nodeMap = new Map();
-    _graphData.nodes.forEach(n => _nodeMap.set(n.id, n));
+    // _nodeMap is built in loadMemoryGraph() and includes ALL nodes.
+    if (!_nodeMap || !_nodeMap.size) {
+        _nodeMap = new Map();
+        _structuralNodes.forEach(n => _nodeMap.set(n.id, n));
+        _conclusionNodes.forEach(n => _nodeMap.set(n.id, n));
+    }
 
     _clusterColorMap = new Map();
     _clusterLabelMap = new Map();
@@ -983,15 +1072,27 @@ function _initSimulation() {
 
     if (_simulation) _simulation.stop();
 
-    // Performance: adjust charge and alpha decay for large node counts
-    // Reduced charge strength for more compact layout
-    const nodeCount = _graphData.nodes.length;
+    // Performance: adjust charge and alpha decay for large node counts.
+    // Only structural nodes are simulated (~200-300), so this is fast.
+    const nodeCount = _structuralNodes.length;
     const chargeStrength = nodeCount > 500 ? -60 : -30;
     const alphaDecay = nodeCount > 500 ? 0.015 : 0.025;
 
-    _simulation = d3.forceSimulation(_graphData.nodes)
+    // Filter edges for the link force: drop edges where BOTH endpoints are
+    // conclusions (conclusions aren't in the sim). Edges with one structural
+    // endpoint (peer→anchor, journal→conclusion, conclusion→skill) are kept
+    // — D3 will resolve the structural endpoint and the conclusion position
+    // is computed each frame by _layoutConclusions().
+    const simEdges = _graphData.edges.filter(e => {
+        const s = _nodeMap.get(e.source);
+        const t = _nodeMap.get(e.target);
+        if (s && t && s._isConclusion && t._isConclusion) return false;
+        return true;
+    });
+
+    _simulation = d3.forceSimulation(_structuralNodes)
         .force('charge', d3.forceManyBody().strength(chargeStrength))
-        .force('link', d3.forceLink(_graphData.edges).id(d => d.id).distance(35).strength(link => {
+        .force('link', d3.forceLink(simEdges).id(d => d.id).distance(35).strength(link => {
             return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.5 : 0.15;
         }))
         .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2))
@@ -1704,32 +1805,49 @@ function _handleGraphDblClick(event) {
     const pos = _screenToGraph(event.offsetX, event.offsetY);
     // Try node hit first for pin/unpin — use expanded radius for easier targeting
     const node = _findNodeAt(pos.x, pos.y);
-    // Also try with an expanded hit area if the normal check missed
+    // Also try with an expanded hit area if the normal check missed.
+    // Search structural nodes AND conclusions (at close zoom).
     let pinNode = node;
     if (!pinNode) {
-        // Expanded search: check nodes with 2x radius for pin targeting
-        for (let i = _graphData.nodes.length - 1; i >= 0; i--) {
-            const n = _graphData.nodes[i];
+        for (let i = _structuralNodes.length - 1; i >= 0; i--) {
+            const n = _structuralNodes[i];
             if (_collapsedClusters.has(n.clusterId)) continue;
             if (_hiddenTypes.has(n.type)) continue;
             const r = (n._radius || 5) * 2.5;
             if (Math.hypot(n.x - pos.x, n.y - pos.y) <= r) { pinNode = n; break; }
+        }
+        if (!pinNode && _zoomTransform.k >= 1.0 && _conclusionNodes) {
+            for (let i = _conclusionNodes.length - 1; i >= 0; i--) {
+                const c = _conclusionNodes[i];
+                if (_collapsedClusters.has(c.clusterId)) continue;
+                if (_hiddenTypes.has(c.type)) continue;
+                if (Math.hypot(c.x - pos.x, c.y - pos.y) <= 5) { pinNode = c; break; }
+            }
         }
     }
     if (pinNode && !pinNode._isMega) {
         event.preventDefault();
         if (_pinnedNodeIds.has(pinNode.id)) {
             _pinnedNodeIds.delete(pinNode.id);
-            pinNode.fx = null;
-            pinNode.fy = null;
-            _simulation.alphaTarget(0.3).restart();
-            setTimeout(() => {
-                if (_simulation) _simulation.alphaTarget(0);
-            }, 500);
+            // For conclusions: just clear the stored position. They're not
+            // in the simulation so no alphaTarget restart needed.
+            if (!pinNode._isConclusion) {
+                pinNode.fx = null;
+                pinNode.fy = null;
+                _simulation.alphaTarget(0.3).restart();
+                setTimeout(() => {
+                    if (_simulation) _simulation.alphaTarget(0);
+                }, 500);
+            } else {
+                pinNode.fx = null;
+                pinNode.fy = null;
+            }
         } else {
             _pinnedNodeIds.add(pinNode.id);
             pinNode.fx = pinNode.x;
             pinNode.fy = pinNode.y;
+            // Pinned conclusions stay in place — _layoutConclusions()
+            // respects fx/fy and skips repositioning.
         }
         _render();
         return;
@@ -1773,12 +1891,72 @@ function _blendEdgeColor(sourceClusterId, targetClusterId, alpha) {
     return 'rgba(' + r + ',' + g + ',' + bl + ',' + alpha + ')';
 }
 
+// ── Hybrid layout: phyllotaxis positioning for conclusion nodes ────────────
+// Positions individual conclusion nodes around their anchor node using a
+// fibonacci / sunflower-seed distribution. Called every frame before
+// _render() so the conclusion cloud follows the anchor as it moves via
+// the force simulation. O(n) — 15K nodes < 1ms.
+function _layoutConclusions() {
+    if (!_conclusionNodes || !_conclusionNodes.length) return;
+
+    // Map clusterId → anchor {x, y} from structural nodes in the sim.
+    const anchorMap = new Map();
+    for (const n of _structuralNodes) {
+        if (n._isAnchor && n.x != null) {
+            anchorMap.set(n.clusterId, { x: n.x, y: n.y });
+        }
+    }
+
+    // Group conclusions by cluster for stable phyllotaxis indexing.
+    const byCluster = new Map();
+    for (const c of _conclusionNodes) {
+        if (!byCluster.has(c.clusterId)) byCluster.set(c.clusterId, []);
+        byCluster.get(c.clusterId).push(c);
+    }
+
+    byCluster.forEach((conclusions, clusterId) => {
+        const anchor = anchorMap.get(clusterId);
+        if (!anchor) return; // anchor not yet positioned
+        conclusions.forEach((conc, i) => {
+            // Pinned conclusions keep their position (don't reposition).
+            if (_pinnedNodeIds.has(conc.id) && conc.fx != null) {
+                conc.x = conc.fx;
+                conc.y = conc.fy;
+                return;
+            }
+            const angle = i * GOLDEN_ANGLE;
+            const radius = CONCLUSION_SPACING * Math.sqrt(i);
+            conc.x = anchor.x + radius * Math.cos(angle);
+            conc.y = anchor.y + radius * Math.sin(angle);
+        });
+    });
+}
+
+// Viewport culling helper for LOD edge rendering.
+function _isInViewport(graphX, graphY, margin) {
+    const m = margin == null ? 50 : margin;
+    const screenX = graphX * _zoomTransform.k + _zoomTransform.x;
+    const screenY = graphY * _zoomTransform.k + _zoomTransform.y;
+    return screenX > -m && screenX < _canvas.width + m &&
+           screenY > -m && screenY < _canvas.height + m;
+}
+
+// Determine the render color for a conclusion node based on its cluster.
+function _conclusionColorFor(node) {
+    const c = _clusterColorMap.get(node.clusterId);
+    return c || '#fbbf24';
+}
+
 function _render() {
     if (!_ctx || !_canvas || !_graphData) return;
 
     _ctx.save();
     _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
     _ctx.restore();
+
+    // Position conclusion nodes geometrically before drawing anything.
+    // This runs every frame so the phyllotaxis cloud follows its anchor.
+    _layoutConclusions();
 
     _ctx.save();
     _ctx.translate(_zoomTransform.x, _zoomTransform.y);
@@ -1801,6 +1979,21 @@ function _render() {
     }
 
     const drawnAggregated = new Set();
+    // Pre-compute which edges are conclusion cross-layer (touch a conclusion
+    // node). These get LOD treatment; structural edges render as before.
+    const conclusionCrossLayerTypes = new Set(['honcho:references_skill', 'honcho:references_memory', 'journal:references']);
+    // For medium-zoom sampling: count conclusion cross-layer edges to pick N.
+    let _conclusionEdgeCount = 0;
+    for (const edge of _graphData.edges) {
+        if (!conclusionCrossLayerTypes.has(edge.type)) continue;
+        const s = _resolveEdgeNode(edge.source);
+        const t = _resolveEdgeNode(edge.target);
+        if (s && t && (s._isConclusion || t._isConclusion)) _conclusionEdgeCount++;
+    }
+    const _conclusionSampleN = Math.max(1, Math.floor(_conclusionEdgeCount / 500));
+    let _conclusionEdgeIdx = 0;
+    const k = _zoomTransform.k;
+
     for (const edge of _graphData.edges) {
         const source = _resolveEdgeNode(edge.source);
         const target = _resolveEdgeNode(edge.target);
@@ -1810,6 +2003,24 @@ function _render() {
         const sourceCollapsed = _collapsedClusters.has(source.clusterId);
         const targetCollapsed = _collapsedClusters.has(target.clusterId);
         if (sourceCollapsed && targetCollapsed && source.clusterId === target.clusterId) continue;
+
+        // ── LOD for conclusion cross-layer edges (Task 5) ────────────────
+        // Skip conclusion cross-layer edges at far zoom, sample at medium,
+        // viewport-cull at close zoom. Structural edges always render.
+        const isConcEdge = conclusionCrossLayerTypes.has(edge.type) && (source._isConclusion || target._isConclusion);
+        if (isConcEdge) {
+            if (k < 0.4) {
+                continue; // FAR: skip all conclusion cross-layer edges
+            } else if (k < 1.0) {
+                // MEDIUM: render every Nth edge
+                if (_conclusionEdgeIdx % _conclusionSampleN !== 0) { _conclusionEdgeIdx++; continue; }
+                _conclusionEdgeIdx++;
+            } else {
+                // CLOSE: viewport culling — skip if neither endpoint visible
+                if (!_isInViewport(source.x, source.y) && !_isInViewport(target.x, target.y)) continue;
+            }
+        }
+
         if (sourceCollapsed || targetCollapsed) {
             const aggKey = [
                 sourceCollapsed ? 'c:' + source.clusterId : source.id,
@@ -1907,6 +2118,7 @@ function _render() {
 
         let nodeColor = _clusterColorMap.get(node.clusterId) || '#888888';
         if (node.type === 'honcho-conclusion-group' || node.type === 'honcho-conclusion') nodeColor = '#fbbf24';
+        else if (node.type === 'honcho-conclusion-anchor') nodeColor = 'rgba(251,191,36,0.25)'; // faint anchor dot
         else if (node.type === 'honcho-peer') nodeColor = '#c084fc';
         else if (node.type === 'honcho-session') nodeColor = '#22d3ee';
         else if (node.type === 'journal-entry') nodeColor = node.session_type === 'Nightly' ? '#6366f1' : '#10b981';
@@ -1924,8 +2136,8 @@ function _render() {
         } else if (node.type === 'memory') {
             const side = r * 2;
             _ctx.rect(node.x - side / 2, node.y - side / 2, side, side);
-        } else if (node.type === 'honcho-conclusion-group' || node.type === 'honcho-conclusion') {
-            const circleRadius = node._radius || (node.type === 'honcho-conclusion-group' ? 10 : 6);
+        } else if (node.type === 'honcho-conclusion-group' || node.type === 'honcho-conclusion' || node.type === 'honcho-conclusion-anchor') {
+            const circleRadius = node._radius || (node.type === 'honcho-conclusion-group' ? 10 : (node.type === 'honcho-conclusion-anchor' ? 4 : 6));
             _ctx.arc(node.x, node.y, circleRadius, 0, 2 * Math.PI);
         } else if (node.type === 'honcho-peer') {
             const size = Math.max(r, 12);
@@ -2006,7 +2218,7 @@ function _render() {
             _ctx.globalAlpha = searchOpacity;
         }
 
-        if (_zoomTransform.k > 0.5 && node.type !== 'honcho-conclusion') {
+        if (_zoomTransform.k > 0.5 && node.type !== 'honcho-conclusion' && node.type !== 'honcho-conclusion-anchor') {
             _ctx.fillStyle = 'rgba(255,255,255,0.8)';
             _ctx.font = '10px sans-serif';
             _ctx.textAlign = 'center';
@@ -2015,13 +2227,107 @@ function _render() {
         _ctx.globalAlpha = 1.0;
     }
 
+    // ── LOD rendering for individual conclusion nodes (Task 4) ─────────────
+    // Conclusions are rendered as simple dots, not full shapes:
+    //   k < 0.4  → 1px fillRect dots (fastest — the "constellation" look)
+    //   0.4..1.0 → 2px arc dots with subtle glow
+    //   k ≥ 1.0  → 3px circles with stroke, viewport culling, labels at high zoom
+    if (_conclusionNodes && _conclusionNodes.length) {
+        const ck = _zoomTransform.k;
+        const concColor = '#fbbf24';
+        if (ck < 0.4) {
+            // FAR: 1px dots, no stroke, no labels, no hit-testing
+            _ctx.fillStyle = concColor;
+            for (const c of _conclusionNodes) {
+                if (_collapsedClusters.has(c.clusterId)) continue;
+                if (_hiddenTypes.has(c.type)) continue;
+                if (c.x == null) continue;
+                const isMatch = !_searchQuery || _searchMatchIds.has(c.id);
+                _ctx.globalAlpha = _searchQuery ? (isMatch ? 1.0 : 0.1) : 1.0;
+                _ctx.fillRect(c.x - 0.5, c.y - 0.5, 1, 1);
+            }
+            _ctx.globalAlpha = 1.0;
+        } else if (ck < 1.0) {
+            // MEDIUM: 2px dots with subtle glow
+            _ctx.fillStyle = concColor;
+            for (const c of _conclusionNodes) {
+                if (_collapsedClusters.has(c.clusterId)) continue;
+                if (_hiddenTypes.has(c.type)) continue;
+                if (c.x == null) continue;
+                const isMatch = !_searchQuery || _searchMatchIds.has(c.id);
+                _ctx.globalAlpha = _searchQuery ? (isMatch ? 1.0 : 0.1) : 1.0;
+                _ctx.beginPath();
+                _ctx.arc(c.x, c.y, 1.5, 0, 2 * Math.PI);
+                _ctx.fill();
+            }
+            _ctx.globalAlpha = 1.0;
+        } else {
+            // CLOSE: full circles with stroke, viewport culling, labels
+            for (const c of _conclusionNodes) {
+                if (_collapsedClusters.has(c.clusterId)) continue;
+                if (_hiddenTypes.has(c.type)) continue;
+                if (c.x == null) continue;
+                // Viewport culling — skip nodes outside the visible area
+                if (!_isInViewport(c.x, c.y, 10)) continue;
+                const isMatch = !_searchQuery || _searchMatchIds.has(c.id);
+                const searchOp = _searchQuery ? (isMatch ? 1.0 : 0.1) : 1.0;
+                _ctx.globalAlpha = searchOp;
+                _ctx.beginPath();
+                _ctx.arc(c.x, c.y, 3, 0, 2 * Math.PI);
+                _ctx.fillStyle = concColor;
+                _ctx.fill();
+                _ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                _ctx.lineWidth = 0.5;
+                _ctx.stroke();
+                if (isMatch && _searchQuery) {
+                    _ctx.globalAlpha = 1.0;
+                    _ctx.beginPath();
+                    _ctx.arc(c.x, c.y, 5, 0, 2 * Math.PI);
+                    _ctx.strokeStyle = 'rgba(245, 180, 25, 0.5)';
+                    _ctx.lineWidth = 1.5;
+                    _ctx.stroke();
+                    _ctx.globalAlpha = searchOp;
+                }
+                if (_pinnedNodeIds.has(c.id)) {
+                    _ctx.globalAlpha = 1.0;
+                    _ctx.beginPath();
+                    _ctx.arc(c.x, c.y, 5, 0, 2 * Math.PI);
+                    _ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                    _ctx.lineWidth = 1.5;
+                    _ctx.stroke();
+                    _ctx.globalAlpha = searchOp;
+                }
+                // Labels only at very high zoom
+                if (ck > 2.0) {
+                    _ctx.globalAlpha = searchOp;
+                    _ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                    _ctx.font = '9px sans-serif';
+                    _ctx.textAlign = 'center';
+                    _ctx.fillText(c.label || '', c.x, c.y + 8);
+                }
+            }
+            _ctx.globalAlpha = 1.0;
+        }
+    }
+
     if (_graphData.clusters && _zoomTransform.k > 0.3) {
         _graphData.clusters.forEach(cluster => {
             const visibleMembers = cluster.nodeIds.map(id => _nodeMap.get(id)).filter(n => n && n.x != null && !_hiddenTypes.has(n.type));
             if (!visibleMembers.length) return;
             const cx = visibleMembers.reduce((s, n) => s + n.x, 0) / visibleMembers.length;
             const cy = visibleMembers.reduce((s, n) => s + n.y, 0) / visibleMembers.length;
-            const text = cluster.label + ' · ' + visibleMembers.length;
+            // For conclusion clusters with an anchor, show the total
+            // conclusion count (conclusion_count) instead of just the
+            // anchor member count (which is always 1).
+            const anchor = visibleMembers.find(n => n._isAnchor);
+            let displayCount;
+            if (anchor) {
+                const rendered = _conclusionNodes.filter(c => c.clusterId === cluster.id).length;
+                displayCount = anchor.conclusion_count || rendered || visibleMembers.length;
+            } else {
+                displayCount = visibleMembers.length;
+            }
+            const text = cluster.label + ' · ' + displayCount;
             _ctx.font = '12px sans-serif';
             _ctx.textAlign = 'center';
             const textWidth = _ctx.measureText(text).width;
@@ -2037,7 +2343,10 @@ function _render() {
 
 function _startRenderLoop() {
     if (_rafId) cancelAnimationFrame(_rafId);
-    _simulation.on('tick', _render);
+    // Run _layoutConclusions() before each render so the phyllotaxis
+    // cloud follows the anchor node as it moves via the force simulation.
+    _simulation.on('tick', () => { _layoutConclusions(); _render(); });
+    _layoutConclusions();
     _render();
 }
 
@@ -2069,9 +2378,14 @@ function _renderStats() {
     const visibleSkills = visibleNodes.filter(node => node.type === 'skill').length;
     const visibleMemories = visibleNodes.filter(node => node.type === 'memory' || node.type === 'user' || node.type === 'soul').length;
     const visibleJournal = visibleNodes.filter(node => node.type === 'journal-entry').length;
+    // Include individual conclusion nodes in visible/total counts.
+    // _conclusionNodes are split out from _graphData.nodes for force-sim
+    // exclusion, but stats must still report them.
+    const conclusionTotal = (_conclusionNodes || []).length;
+    const visibleConclusions = (_conclusionNodes || []).filter(c => !_hiddenTypes.has(c.type)).length;
     const visibleHonchoConclusions = visibleNodes.filter(node =>
-        node.type === 'honcho-conclusion-group' || node.type === 'honcho-conclusion'
-    ).length;
+        node.type === 'honcho-conclusion-group' || node.type === 'honcho-conclusion-anchor'
+    ).length + visibleConclusions;
     const visibleHonchoPeers = visibleNodes.filter(node => node.type === 'honcho-peer').length;
     const visibleWiki = visibleNodes.filter(node => node.type === 'wiki').length;
     const visibleDocs = visibleNodes.filter(node => node.type === 'document').length;
@@ -2086,8 +2400,14 @@ function _renderStats() {
         text += ' | Journal: ' + visibleJournal + '/' + stats.journalEntryCount;
     }
     if (stats.honchoConclusionCount > 0 || stats.honchoPeerCount > 0) {
-        text += ' | Honcho: ' + visibleHonchoConclusions + '/' + stats.honchoConclusionCount + ' conclusions, ' +
-            visibleHonchoPeers + '/' + stats.honchoPeerCount + ' peers';
+        if (stats.honchoIndividualMode && stats.honchoConclusionRenderedCount) {
+            text += ' | Honcho: ' + visibleHonchoConclusions + '/' + stats.honchoConclusionRenderedCount +
+                ' rendered (' + stats.honchoConclusionCount + ' total), ' +
+                visibleHonchoPeers + '/' + stats.honchoPeerCount + ' peers';
+        } else {
+            text += ' | Honcho: ' + visibleHonchoConclusions + '/' + stats.honchoConclusionCount + ' conclusions, ' +
+                visibleHonchoPeers + '/' + stats.honchoPeerCount + ' peers';
+        }
     }
     if (stats.wikiCount > 0) {
         text += ' | Wiki: ' + visibleWiki + '/' + stats.wikiCount;
