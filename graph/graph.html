@@ -437,7 +437,7 @@ let _statsExpanded = false;
 let _conclusionNodes = [];
 let _structuralNodes = [];
 const GOLDEN_ANGLE = 2.39996; // 137.5° in radians
-const CONCLUSION_SPACING = 3.5; // phyllotaxis radius constant
+const CONCLUSION_SPACING = 6.0; // phyllotaxis radius constant — wider spacing for legibility
 
 const FILTER_STORAGE_KEY = 'memory-graph-hidden-types';
 const EDGE_FILTER_STORAGE_KEY = 'memory-graph-hidden-edge-types';
@@ -755,7 +755,7 @@ function _clusterGeometry() {
             const concCount = anchorNode.conclusion_count || 0;
             const renderedCount = _conclusionNodes.filter(c => c.clusterId === cluster.id).length;
             const n = Math.max(renderedCount, concCount, members.length);
-            maxDist = n > 0 ? CONCLUSION_SPACING * Math.sqrt(n) + 8 : (members.length > 1 ? Math.max(...members.map(mnd => Math.hypot(mnd.x - cx, mnd.y - cy))) : 10);
+            maxDist = n > 0 ? CONCLUSION_SPACING * Math.sqrt(n) + 20 : (members.length > 1 ? Math.max(...members.map(mnd => Math.hypot(mnd.x - cx, mnd.y - cy))) : 10);
         } else {
             cx = members.reduce((s, n) => s + n.x, 0) / members.length;
             cy = members.reduce((s, n) => s + n.y, 0) / members.length;
@@ -832,7 +832,7 @@ function _findLabelAt(graphX, graphY) {
 function _findHaloAt(graphX, graphY) {
     for (const geo of _clusterGeometry()) {
         if (_collapsedClusters.has(geo.cluster.id)) continue;
-        if (Math.hypot(geo.cx - graphX, geo.cy - graphY) <= geo.maxDist + 20) return geo;
+        if (Math.hypot(geo.cx - graphX, geo.cy - graphY) <= geo.maxDist + 30) return geo;
     }
     return null;
 }
@@ -2103,9 +2103,11 @@ function _render() {
             _ctx.fillText(geo.cluster.label + ' · ' + visibleMembers.length, geo.cx, geo.cy + 4);
             return;
         }
+        // Larger halo for journal and honcho conclusion clusters to reduce overlap
+        const haloPad = cluster.id.startsWith('journal') ? 35 : (cluster.id.startsWith('honcho-conclusion') ? 30 : 20);
         _ctx.fillStyle = geo.cluster.color + '0D';
         _ctx.beginPath();
-        _ctx.arc(geo.cx, geo.cy, geo.maxDist + 20, 0, 2 * Math.PI);
+        _ctx.arc(geo.cx, geo.cy, geo.maxDist + haloPad, 0, 2 * Math.PI);
         _ctx.fill();
     });
 
@@ -2298,14 +2300,9 @@ function _render() {
                     _ctx.stroke();
                     _ctx.globalAlpha = searchOp;
                 }
-                // Labels only at very high zoom
-                if (ck > 2.0) {
-                    _ctx.globalAlpha = searchOp;
-                    _ctx.fillStyle = 'rgba(255,255,255,0.6)';
-                    _ctx.font = '9px sans-serif';
-                    _ctx.textAlign = 'center';
-                    _ctx.fillText(c.label || '', c.x, c.y + 8);
-                }
+                // No labels on conclusion dots — they overlap and become
+                // unreadable with thousands of nodes. Labels are shown only
+                // on hover via the hover card (_showHoverCard).
             }
             _ctx.globalAlpha = 1.0;
         }
