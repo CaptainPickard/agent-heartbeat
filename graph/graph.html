@@ -1076,7 +1076,7 @@ function _initSimulation() {
     // Only structural nodes are simulated (~200-300), so this is fast.
     // Low charge keeps the graph compact — center gravity does the work.
     const nodeCount = _structuralNodes.length;
-    const chargeStrength = nodeCount > 500 ? -50 : -35;
+    const chargeStrength = nodeCount > 500 ? -65 : -35;
     const alphaDecay = nodeCount > 500 ? 0.015 : 0.025;
 
     // Filter edges for the link force: drop ANY edge that references a
@@ -1128,7 +1128,7 @@ function _initSimulation() {
             // Capped collision radius prevents explosive spread.
             const diskR = _anchorDiskRadius(d);
             if (diskR > 0) return diskR; // already capped at 80
-            if (d.type === 'journal-entry') return 12;
+            if (d.type === 'journal-entry') return 20;
             return (d._radius || 5) + 2;
         }))
         .force('cluster', forceClusterGravity(0.4))
@@ -2137,7 +2137,7 @@ function _render() {
             return;
         }
         // Larger halo for journal and honcho conclusion clusters to reduce overlap
-        const haloPad = geo.cluster.id.startsWith('journal') ? 35 : (geo.cluster.id.startsWith('honcho-conclusion') ? 30 : 20);
+        const haloPad = geo.cluster.id.startsWith('journal') ? 60 : (geo.cluster.id.startsWith('honcho-conclusion') ? 30 : 20);
         _ctx.fillStyle = geo.cluster.color + '0D';
         _ctx.beginPath();
         _ctx.arc(geo.cx, geo.cy, geo.maxDist + haloPad, 0, 2 * Math.PI);
