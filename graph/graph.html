@@ -1076,7 +1076,7 @@ function _initSimulation() {
     // Only structural nodes are simulated (~200-300), so this is fast.
     // Low charge keeps the graph compact — center gravity does the work.
     const nodeCount = _structuralNodes.length;
-    const chargeStrength = nodeCount > 500 ? -30 : -20;
+    const chargeStrength = nodeCount > 500 ? -50 : -35;
     const alphaDecay = nodeCount > 500 ? 0.015 : 0.025;
 
     // Filter edges for the link force: drop ANY edge that references a
@@ -1100,7 +1100,7 @@ function _initSimulation() {
         const concCount = node.conclusion_count || 0;
         const renderedCount = _conclusionNodes.filter(c => c.clusterId === node.clusterId).length;
         const n = Math.max(renderedCount, concCount, 1);
-        return Math.min(CONCLUSION_SPACING * Math.sqrt(n) + 10, 80);
+        return Math.min(CONCLUSION_SPACING * Math.sqrt(n) + 10, 120);
     };
 
     _simulation = d3.forceSimulation(_structuralNodes)
@@ -1121,9 +1121,9 @@ function _initSimulation() {
         }))
         // Strong center gravity — this is the "single point of gravity"
         // that pulls everything back together instead of flying apart.
-        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2).strength(0.1))
-        .force('x', d3.forceX(_canvas.width / 2).strength(0.05))
-        .force('y', d3.forceY(_canvas.height / 2).strength(0.05))
+        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2).strength(0.06))
+        .force('x', d3.forceX(_canvas.width / 2).strength(0.03))
+        .force('y', d3.forceY(_canvas.height / 2).strength(0.03))
         .force('collide', d3.forceCollide().radius(d => {
             // Capped collision radius prevents explosive spread.
             const diskR = _anchorDiskRadius(d);
