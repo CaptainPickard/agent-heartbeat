@@ -1074,8 +1074,9 @@ function _initSimulation() {
 
     // Performance: adjust charge and alpha decay for large node counts.
     // Only structural nodes are simulated (~200-300), so this is fast.
+    // Low charge keeps the graph compact — center gravity does the work.
     const nodeCount = _structuralNodes.length;
-    const chargeStrength = nodeCount > 500 ? -120 : -60;
+    const chargeStrength = nodeCount > 500 ? -30 : -20;
     const alphaDecay = nodeCount > 500 ? 0.015 : 0.025;
 
     // Filter edges for the link force: drop ANY edge that references a
@@ -1092,44 +1093,45 @@ function _initSimulation() {
     });
 
     // Compute the phyllotaxis disk radius for anchor nodes so the collision
-    // force can prevent cluster overlap. Without this, anchors collide as
-    // tiny dots (radius ~7px) while their conclusion clouds are 100+ px.
+    // force can prevent cluster overlap. Cap at 80px so large clusters don't
+    // push each other hundreds of pixels apart.
     const _anchorDiskRadius = (node) => {
         if (!node || !node._isAnchor) return 0;
         const concCount = node.conclusion_count || 0;
         const renderedCount = _conclusionNodes.filter(c => c.clusterId === node.clusterId).length;
         const n = Math.max(renderedCount, concCount, 1);
-        return CONCLUSION_SPACING * Math.sqrt(n) + 15;
+        return Math.min(CONCLUSION_SPACING * Math.sqrt(n) + 10, 80);
     };
 
     _simulation = d3.forceSimulation(_structuralNodes)
         .force('charge', d3.forceManyBody().strength(d => {
-            // Anchors repel moderately to prevent overlap but not fly apart.
-            // Base charge is mild so the graph stays compact.
+            // Minimal repulsion — just enough to prevent nodes stacking
+            // on the exact same pixel. Center gravity pulls everything in.
             if (d._isAnchor) return chargeStrength * 1.5;
             return chargeStrength;
         }))
         .force('link', d3.forceLink(simEdges).id(d => d.id).distance(link => {
-            // Moderate link distance for anchor edges — enough room for
-            // the cloud but not so far that peers disconnect visually.
             const s = typeof link.source === 'object' ? link.source : _nodeMap.get(link.source);
             const t = typeof link.target === 'object' ? link.target : _nodeMap.get(link.target);
-            if ((s && s._isAnchor) || (t && t._isAnchor)) return 50;
-            return 30;
+            if ((s && s._isAnchor) || (t && t._isAnchor)) return 40;
+            return 25;
         }).strength(link => {
-            // Stronger links pull connected nodes together more tightly.
-            return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.7 : 0.2;
+            // Strong links pull connected nodes together tightly.
+            return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.8 : 0.3;
         }))
-        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2).strength(0.08))
+        // Strong center gravity — this is the "single point of gravity"
+        // that pulls everything back together instead of flying apart.
+        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2).strength(0.1))
+        .force('x', d3.forceX(_canvas.width / 2).strength(0.05))
+        .force('y', d3.forceY(_canvas.height / 2).strength(0.05))
         .force('collide', d3.forceCollide().radius(d => {
-            // Anchor collision uses disk radius but with a compactness
-            // factor — we want overlap prevention, not maximum spread.
+            // Capped collision radius prevents explosive spread.
             const diskR = _anchorDiskRadius(d);
-            if (diskR > 0) return diskR * 0.75; // 75% of disk = snug but not overlapping
-            if (d.type === 'journal-entry') return 14;
+            if (diskR > 0) return diskR; // already capped at 80
+            if (d.type === 'journal-entry') return 12;
             return (d._radius || 5) + 2;
         }))
-        .force('cluster', forceClusterGravity(0.3))
+        .force('cluster', forceClusterGravity(0.4))
         .alphaDecay(alphaDecay);
 
     // All clusters expanded by default — no auto-collapse
