@@ -1129,7 +1129,7 @@ function _initSimulation() {
             // curve and snake organically instead of collapsing tight.
             const s = typeof link.source === 'object' ? link.source : _nodeMap.get(link.source);
             const t = typeof link.target === 'object' ? link.target : _nodeMap.get(link.target);
-            if (s && t && s.type === 'journal-entry' && t.type === 'journal-entry') return 90;
+            if (s && t && s.type === 'journal-entry' && t.type === 'journal-entry') return 60;
             if ((s && s._isAnchor) || (t && t._isAnchor)) return 40;
             return 25;
         }).strength(link => {
@@ -1172,6 +1172,37 @@ function _initSimulation() {
             return (d._radius || 5) + 12;
         }))
         .force('cluster', forceClusterGravity(0.4))
+        .force('clusterCollide', (alpha) => {
+            // Cluster-level collision: push cluster centroids apart by
+            // their halo radii so halos don't touch. This is separate from
+            // node-dot collision — it operates on whole clusters.
+            const geos = _clusterGeometry();
+            if (geos.length < 2) return;
+            for (let i = 0; i < geos.length; i++) {
+                for (let j = i + 1; j < geos.length; j++) {
+                    const a = geos[i], b = geos[j];
+                    const dx = b.cx - a.cx;
+                    const dy = b.cy - a.cy;
+                    const dist = Math.hypot(dx, dy) || 0.001;
+                    // Minimum distance = sum of both halos (don't touch)
+                    const minDist = a.maxDist + b.maxDist + 30; // 30px gap
+                    if (dist < minDist) {
+                        const push = (minDist - dist) * 0.5 * alpha;
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        // Push each cluster's members in the push direction
+                        for (const m of a.members) {
+                            m.vx -= nx * push;
+                            m.vy -= ny * push;
+                        }
+                        for (const m of b.members) {
+                            m.vx += nx * push;
+                            m.vy += ny * push;
+                        }
+                    }
+                }
+            }
+        })
         .alphaDecay(alphaDecay);
 
     // All clusters expanded by default — no auto-collapse
