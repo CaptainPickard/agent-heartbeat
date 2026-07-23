@@ -1072,6 +1072,23 @@ function _initSimulation() {
 
     if (_simulation) _simulation.stop();
 
+    // Pin journal entry nodes at the center of the canvas in a horizontal
+    // chain layout. They become the gravitational anchor — everything else
+    // (skills, memories, honcho clouds, peers) orbits around them.
+    const centerX = _canvas.width / 2;
+    const centerY = _canvas.height / 2;
+    const journalNodes = _structuralNodes.filter(n => n.type === 'journal-entry');
+    if (journalNodes.length > 0) {
+        // Spread journal entries in a horizontal line across the center,
+        // spaced 60px apart, centered on the canvas middle.
+        const journalSpacing = 60;
+        const startX = centerX - (journalNodes.length - 1) * journalSpacing / 2;
+        journalNodes.forEach((node, i) => {
+            node.fx = startX + i * journalSpacing;
+            node.fy = centerY;
+        });
+    }
+
     // Performance: adjust charge and alpha decay for large node counts.
     // Only structural nodes are simulated (~200-300), so this is fast.
     // Low charge keeps the graph compact — center gravity does the work.
@@ -1100,7 +1117,7 @@ function _initSimulation() {
         const concCount = node.conclusion_count || 0;
         const renderedCount = _conclusionNodes.filter(c => c.clusterId === node.clusterId).length;
         const n = Math.max(renderedCount, concCount, 1);
-        return Math.min(CONCLUSION_SPACING * Math.sqrt(n) + 10, 160);
+        return Math.min(CONCLUSION_SPACING * Math.sqrt(n) + 10, 200);
     };
 
     _simulation = d3.forceSimulation(_structuralNodes)
@@ -1129,10 +1146,10 @@ function _initSimulation() {
             // skills and other non-journal clusters away from honcho clouds.
             const diskR = _anchorDiskRadius(d);
             if (diskR > 0) return diskR;
-            // Journal entries: modest collision (80px) — the big visual
-            // halo (240px) overlaps other clusters, but the physics
-            // collision is small enough for the chain to snake through.
-            if (d.type === 'journal-entry') return 80;
+            // Journal entries are pinned at center — no collision needed.
+            // Other nodes freely sit on top of/around them (the big visual
+            // halo is decorative, not a physical barrier).
+            if (d.type === 'journal-entry') return 0;
             // Skills and other structural nodes: generous collision so
             // they don't overlap each other or get pushed into honcho halos.
             return (d._radius || 5) + 12;
