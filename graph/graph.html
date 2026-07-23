@@ -1129,15 +1129,28 @@ function _initSimulation() {
             // Strong links pull connected nodes together tightly.
             return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.8 : 0.3;
         }))
-        // Journal entries get gentle gravity (0.01) — just enough to keep
-        // them near center so other nodes cluster around them. Other nodes
-        // get stronger pull (0.06) toward the same center — they orbit the
-        // journal string. The difference means journals are the loose anchor
-        // that everything gravitates toward, but journals still drift freely
-        // on their chain edges without being pinned.
-        .force('center', d3.forceCenter(centerX, centerY).strength(0.02))
-        .force('x', d3.forceX(centerX).strength(d => d.type === 'journal-entry' ? 0.01 : 0.06))
-        .force('y', d3.forceY(centerY).strength(d => d.type === 'journal-entry' ? 0.01 : 0.06))
+        // Custom force: pull all non-journal nodes toward the live centroid
+        // of the journal entries. The centroid updates every tick as journals
+        // drift, so everything else follows the journal string wherever it goes.
+        // Journal entries themselves are unaffected — they drift freely on
+        // their chain edges.
+        .force('journalGravity', (alpha) => {
+            if (!_structuralNodes || !_structuralNodes.length) return;
+            let jx = 0, jy = 0, jcount = 0;
+            for (const n of _structuralNodes) {
+                if (n.type === 'journal-entry' && n.x != null) {
+                    jx += n.x; jy += n.y; jcount++;
+                }
+            }
+            if (jcount === 0) return;
+            jx /= jcount; jy /= jcount;
+            const strength = 0.05;
+            for (const n of _structuralNodes) {
+                if (n.type === 'journal-entry') continue;
+                n.vx += (jx - n.x) * alpha * strength;
+                n.vy += (jy - n.y) * alpha * strength;
+            }
+        })
         .force('collide', d3.forceCollide().radius(d => {
             // Honcho anchors: full disk radius (capped at 160) — pushes
             // skills and other non-journal clusters away from honcho clouds.
