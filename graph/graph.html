@@ -759,7 +759,14 @@ function _clusterGeometry() {
         } else {
             cx = members.reduce((s, n) => s + n.x, 0) / members.length;
             cy = members.reduce((s, n) => s + n.y, 0) / members.length;
-            maxDist = Math.max(...members.map(n => Math.hypot(n.x - cx, n.y - cy)));
+            // For journal clusters, cap maxDist so the halo doesn't become
+            // enormous when entries spread out on their chain edges. Use
+            // a compact radius based on member count, not raw spread.
+            if (cluster.id.startsWith('journal')) {
+                maxDist = Math.min(members.length * 8, 120);
+            } else {
+                maxDist = Math.max(...members.map(n => Math.hypot(n.x - cx, n.y - cy)));
+            }
         }
         result.push({ cluster, members, cx, cy, maxDist });
     });
