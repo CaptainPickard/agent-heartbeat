@@ -916,6 +916,9 @@ function forceClusterGravity(strength) {
     function force(alpha) {
         const centroids = new Map();
         nodes.forEach(n => {
+            // Skip journal entries — they should string freely through
+            // the graph via chain edges, not be pulled to a cluster centroid.
+            if (n.type === 'journal-entry') return;
             const c = n.clusterId;
             if (!centroids.has(c)) centroids.set(c, { x: 0, y: 0, count: 0 });
             const cen = centroids.get(c);
@@ -923,6 +926,7 @@ function forceClusterGravity(strength) {
         });
         centroids.forEach(cen => { cen.x /= cen.count; cen.y /= cen.count; });
         nodes.forEach(n => {
+            if (n.type === 'journal-entry') return;
             const cen = centroids.get(n.clusterId);
             if (cen) {
                 n.vx += (cen.x - n.x) * alpha * strength;
@@ -1072,14 +1076,8 @@ function _initSimulation() {
 
     if (_simulation) _simulation.stop();
 
-    // Give journal entry nodes a very strong attraction to the canvas
-    // center — stronger than other nodes. Combined with the journal:chain
-    // edges (which connect consecutive entries), they'll snake organically
-    // around the center instead of flying off to the edges. No fx/fy pinning
-    // — the chain edges and cluster gravity create the organic curve.
     const centerX = _canvas.width / 2;
     const centerY = _canvas.height / 2;
-    const _isJournal = (d) => d && d.type === 'journal-entry';
 
     // Performance: adjust charge and alpha decay for large node counts.
     // Only structural nodes are simulated (~200-300), so this is fast.
@@ -1132,12 +1130,10 @@ function _initSimulation() {
             return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.8 : 0.3;
         }))
         // Containment gravity — keeps everything inside a set radius.
-        // Journal entries get a much stronger pull to center (0.25) so
-        // they stay clustered in the middle. Other nodes get a gentler
-        // pull (0.04-0.05) so they orbit around the journal center.
+        // Uniform pull for all nodes — no special journal gravity.
         .force('center', d3.forceCenter(centerX, centerY).strength(0.08))
-        .force('x', d3.forceX(centerX).strength(d => _isJournal(d) ? 0.25 : 0.04))
-        .force('y', d3.forceY(centerY).strength(d => _isJournal(d) ? 0.25 : 0.04))
+        .force('x', d3.forceX(centerX).strength(0.04))
+        .force('y', d3.forceY(centerY).strength(0.04))
         .force('collide', d3.forceCollide().radius(d => {
             // Honcho anchors: full disk radius (capped at 160) — pushes
             // skills and other non-journal clusters away from honcho clouds.
@@ -2157,7 +2153,9 @@ function _render() {
             return;
         }
         // Larger halo for journal and honcho conclusion clusters to reduce overlap
-        const haloPad = geo.cluster.id.startsWith('journal') ? 240 : (geo.cluster.id.startsWith('honcho-conclusion') ? 30 : 20);
+        // No halo for journal clusters — entries string freely through
+        // the graph. Only draw halos for honcho and other clusters.
+        const haloPad = geo.cluster.id.startsWith('journal') ? 0 : (geo.cluster.id.startsWith('honcho-conclusion') ? 30 : 20);
         _ctx.fillStyle = geo.cluster.color + '0D';
         _ctx.beginPath();
         _ctx.arc(geo.cx, geo.cy, geo.maxDist + haloPad, 0, 2 * Math.PI);
