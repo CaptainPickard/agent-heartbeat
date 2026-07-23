@@ -1093,14 +1093,14 @@ function _initSimulation() {
     });
 
     // Compute the phyllotaxis disk radius for anchor nodes so the collision
-    // force can prevent cluster overlap. Cap at 80px so large clusters don't
-    // push each other hundreds of pixels apart.
+    // force can prevent honcho/skill cluster overlap. Cap at 160px — large
+    // enough to push skills and other clusters away from honcho clouds.
     const _anchorDiskRadius = (node) => {
         if (!node || !node._isAnchor) return 0;
         const concCount = node.conclusion_count || 0;
         const renderedCount = _conclusionNodes.filter(c => c.clusterId === node.clusterId).length;
         const n = Math.max(renderedCount, concCount, 1);
-        return Math.min(CONCLUSION_SPACING * Math.sqrt(n) + 10, 120);
+        return Math.min(CONCLUSION_SPACING * Math.sqrt(n) + 10, 160);
     };
 
     _simulation = d3.forceSimulation(_structuralNodes)
@@ -1119,17 +1119,23 @@ function _initSimulation() {
             // Strong links pull connected nodes together tightly.
             return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.8 : 0.3;
         }))
-        // Strong center gravity — this is the "single point of gravity"
-        // that pulls everything back together instead of flying apart.
-        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2).strength(0.04))
-        .force('x', d3.forceX(_canvas.width / 2).strength(0.02))
-        .force('y', d3.forceY(_canvas.height / 2).strength(0.02))
+        // Containment gravity — keeps everything inside a set radius.
+        // Strong enough to counteract the -100 charge and prevent spread.
+        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2).strength(0.08))
+        .force('x', d3.forceX(_canvas.width / 2).strength(0.05))
+        .force('y', d3.forceY(_canvas.height / 2).strength(0.05))
         .force('collide', d3.forceCollide().radius(d => {
-            // Capped collision radius prevents explosive spread.
+            // Honcho anchors: full disk radius (capped at 160) — pushes
+            // skills and other non-journal clusters away from honcho clouds.
             const diskR = _anchorDiskRadius(d);
-            if (diskR > 0) return diskR; // already capped at 80
+            if (diskR > 0) return diskR;
+            // Journal entries: modest collision (80px) — the big visual
+            // halo (240px) overlaps other clusters, but the physics
+            // collision is small enough for the chain to snake through.
             if (d.type === 'journal-entry') return 80;
-            return (d._radius || 5) + 8;
+            // Skills and other structural nodes: generous collision so
+            // they don't overlap each other or get pushed into honcho halos.
+            return (d._radius || 5) + 12;
         }))
         .force('cluster', forceClusterGravity(0.4))
         .alphaDecay(alphaDecay);
