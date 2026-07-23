@@ -1129,12 +1129,15 @@ function _initSimulation() {
             // Strong links pull connected nodes together tightly.
             return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.8 : 0.3;
         }))
-        // Journal entries are the center of gravity — all OTHER nodes pull
-        // toward center (0.06), but journal entries get 0 so they drift
-        // freely. The journal:chain edges keep them connected as a string.
+        // Journal entries get gentle gravity (0.01) — just enough to keep
+        // them near center so other nodes cluster around them. Other nodes
+        // get stronger pull (0.06) toward the same center — they orbit the
+        // journal string. The difference means journals are the loose anchor
+        // that everything gravitates toward, but journals still drift freely
+        // on their chain edges without being pinned.
         .force('center', d3.forceCenter(centerX, centerY).strength(0.02))
-        .force('x', d3.forceX(centerX).strength(d => d.type === 'journal-entry' ? 0 : 0.06))
-        .force('y', d3.forceY(centerY).strength(d => d.type === 'journal-entry' ? 0 : 0.06))
+        .force('x', d3.forceX(centerX).strength(d => d.type === 'journal-entry' ? 0.01 : 0.06))
+        .force('y', d3.forceY(centerY).strength(d => d.type === 'journal-entry' ? 0.01 : 0.06))
         .force('collide', d3.forceCollide().radius(d => {
             // Honcho anchors: full disk radius (capped at 160) — pushes
             // skills and other non-journal clusters away from honcho clouds.
