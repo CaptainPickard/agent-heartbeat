@@ -1129,7 +1129,7 @@ function _initSimulation() {
             // curve and snake organically instead of collapsing tight.
             const s = typeof link.source === 'object' ? link.source : _nodeMap.get(link.source);
             const t = typeof link.target === 'object' ? link.target : _nodeMap.get(link.target);
-            if (s && t && s.type === 'journal-entry' && t.type === 'journal-entry') return 70;
+            if (s && t && s.type === 'journal-entry' && t.type === 'journal-entry') return 90;
             if ((s && s._isAnchor) || (t && t._isAnchor)) return 40;
             return 25;
         }).strength(link => {
