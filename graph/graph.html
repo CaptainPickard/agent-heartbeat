@@ -1072,22 +1072,14 @@ function _initSimulation() {
 
     if (_simulation) _simulation.stop();
 
-    // Pin journal entry nodes at the center of the canvas in a horizontal
-    // chain layout. They become the gravitational anchor — everything else
-    // (skills, memories, honcho clouds, peers) orbits around them.
+    // Give journal entry nodes a very strong attraction to the canvas
+    // center — stronger than other nodes. Combined with the journal:chain
+    // edges (which connect consecutive entries), they'll snake organically
+    // around the center instead of flying off to the edges. No fx/fy pinning
+    // — the chain edges and cluster gravity create the organic curve.
     const centerX = _canvas.width / 2;
     const centerY = _canvas.height / 2;
-    const journalNodes = _structuralNodes.filter(n => n.type === 'journal-entry');
-    if (journalNodes.length > 0) {
-        // Spread journal entries in a horizontal line across the center,
-        // spaced 60px apart, centered on the canvas middle.
-        const journalSpacing = 60;
-        const startX = centerX - (journalNodes.length - 1) * journalSpacing / 2;
-        journalNodes.forEach((node, i) => {
-            node.fx = startX + i * journalSpacing;
-            node.fy = centerY;
-        });
-    }
+    const _isJournal = (d) => d && d.type === 'journal-entry';
 
     // Performance: adjust charge and alpha decay for large node counts.
     // Only structural nodes are simulated (~200-300), so this is fast.
@@ -1128,8 +1120,11 @@ function _initSimulation() {
             return chargeStrength;
         }))
         .force('link', d3.forceLink(simEdges).id(d => d.id).distance(link => {
+            // Journal chain edges get extra distance so the chain can
+            // curve and snake organically instead of collapsing tight.
             const s = typeof link.source === 'object' ? link.source : _nodeMap.get(link.source);
             const t = typeof link.target === 'object' ? link.target : _nodeMap.get(link.target);
+            if (s && t && s.type === 'journal-entry' && t.type === 'journal-entry') return 70;
             if ((s && s._isAnchor) || (t && t._isAnchor)) return 40;
             return 25;
         }).strength(link => {
@@ -1137,10 +1132,12 @@ function _initSimulation() {
             return clusterById[link.source.id || link.source] === clusterById[link.target.id || link.target] ? 0.8 : 0.3;
         }))
         // Containment gravity — keeps everything inside a set radius.
-        // Strong enough to counteract the -100 charge and prevent spread.
-        .force('center', d3.forceCenter(_canvas.width / 2, _canvas.height / 2).strength(0.08))
-        .force('x', d3.forceX(_canvas.width / 2).strength(0.05))
-        .force('y', d3.forceY(_canvas.height / 2).strength(0.05))
+        // Journal entries get a much stronger pull to center (0.25) so
+        // they stay clustered in the middle. Other nodes get a gentler
+        // pull (0.04-0.05) so they orbit around the journal center.
+        .force('center', d3.forceCenter(centerX, centerY).strength(0.08))
+        .force('x', d3.forceX(centerX).strength(d => _isJournal(d) ? 0.25 : 0.04))
+        .force('y', d3.forceY(centerY).strength(d => _isJournal(d) ? 0.25 : 0.04))
         .force('collide', d3.forceCollide().radius(d => {
             // Honcho anchors: full disk radius (capped at 160) — pushes
             // skills and other non-journal clusters away from honcho clouds.
